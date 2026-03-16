@@ -6,6 +6,7 @@ declare global {
     api: {
       setIgnoreMouseEvents: (ignore: boolean) => void
       toggleForceIgnoreMouse: () => void
+      toggleDevTools: () => void
       onForceIgnoreMouseChanged: (callback: (isForced: boolean) => void) => void
       onModeChanged: (callback: (mode: 'pet' | 'window') => void) => void
       showContextMenu: (x: number, y: number) => void

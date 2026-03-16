@@ -19,6 +19,9 @@ const api = {
   toggleForceIgnoreMouse: () => {
     ipcRenderer.send('toggle-force-ignore-mouse');
   },
+  toggleDevTools: () => {
+    ipcRenderer.send('toggle-devtools');
+  },
   onForceIgnoreMouseChanged: (callback: (isForced: boolean) => void) => {
     const handler = (_event: any, isForced: boolean) => callback(isForced);
     ipcRenderer.on('force-ignore-mouse-changed', handler);

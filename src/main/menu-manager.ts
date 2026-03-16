@@ -17,7 +17,10 @@ export class MenuManager {
 
   private configFiles: ConfigFile[] = [];
 
-  constructor(private onModeChange: (mode: 'window' | 'pet') => void) {
+  constructor(
+    private onModeChange: (mode: 'window' | 'pet') => void,
+    private onToggleDevTools: () => void,
+  ) {
     this.setupContextMenu();
   }
 
@@ -95,6 +98,12 @@ export class MenuManager {
         },
       },
       {
+        label: 'Toggle DevTools',
+        click: () => {
+          this.onToggleDevTools();
+        },
+      },
+      {
         label: 'Exit',
         click: () => {
           app.quit();
@@ -151,6 +160,13 @@ export class MenuManager {
         : []),
       { type: 'separator' as const },
       ...this.getModeMenuItems(),
+      { type: 'separator' as const },
+      {
+        label: 'Toggle DevTools',
+        click: () => {
+          this.onToggleDevTools();
+        },
+      },
       { type: 'separator' as const },
       {
         label: 'Switch Character',

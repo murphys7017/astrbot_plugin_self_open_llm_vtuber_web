@@ -23,6 +23,8 @@ export class WindowManager {
   // Track if mouse events are forcibly ignored
   private forceIgnoreMouse = false;
 
+  private shouldRestorePetFocusAfterDevTools = false;
+
   constructor() {
     ipcMain.on('renderer-ready-for-mode-change', (_event, newMode) => {
       if (newMode === 'pet') {
@@ -123,6 +125,20 @@ export class WindowManager {
     this.window.webContents.setWindowOpenHandler((details) => {
       shell.openExternal(details.url);
       return { action: 'deny' };
+    });
+
+    this.window.webContents.on('devtools-opened', () => {
+      if (this.shouldRestorePetFocusAfterDevTools && this.window) {
+        this.window.setFocusable(false);
+        this.shouldRestorePetFocusAfterDevTools = false;
+      }
+    });
+
+    this.window.webContents.on('devtools-closed', () => {
+      if (this.currentMode === 'pet') {
+        this.window?.setFocusable(false);
+      }
+      this.shouldRestorePetFocusAfterDevTools = false;
     });
   }
 
@@ -334,6 +350,31 @@ export class WindowManager {
   // Get current force ignore state
   isForceIgnoreMouse(): boolean {
     return this.forceIgnoreMouse;
+  }
+
+  toggleDevTools(): void {
+    if (!this.window) return;
+
+    if (this.window.isMinimized()) {
+      this.window.restore();
+    }
+
+    this.window.show();
+
+    if (this.window.webContents.isDevToolsOpened()) {
+      this.window.webContents.closeDevTools();
+      if (this.currentMode === 'pet') {
+        this.window.setFocusable(false);
+      }
+      return;
+    }
+
+    if (this.currentMode === 'pet' && !this.window.isFocusable()) {
+      this.window.setFocusable(true);
+      this.shouldRestorePetFocusAfterDevTools = true;
+    }
+
+    this.window.webContents.openDevTools({ mode: 'detach', activate: true });
   }
 
   // Get current mode

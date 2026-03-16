@@ -1,16 +1,14 @@
 /* eslint-disable react/require-default-props */
 import { Box, Button, Menu } from '@chakra-ui/react';
 import {
-  FiSettings, FiClock, FiPlus, FiChevronLeft, FiUsers, FiLayers
+  FiSettings, FiChevronLeft, FiLayers
 } from 'react-icons/fi';
 import { memo } from 'react';
 import { sidebarStyles } from './sidebar-styles';
 import SettingUI from './setting/setting-ui';
 import ChatHistoryPanel from './chat-history-panel';
 import BottomTab from './bottom-tab';
-import HistoryDrawer from './history-drawer';
 import { useSidebar } from '@/hooks/sidebar/use-sidebar';
-import GroupDrawer from './group-drawer';
 import { ModeType } from '@/context/mode-context';
 
 // Type definitions
@@ -21,7 +19,6 @@ interface SidebarProps {
 
 interface HeaderButtonsProps {
   onSettingsOpen: () => void
-  onNewHistory: () => void
   setMode: (mode: ModeType) => void
   currentMode: 'window' | 'pet'
   isElectron: boolean
@@ -82,26 +79,10 @@ const ModeMenu = memo(({ setMode, currentMode, isElectron }: {
 
 ModeMenu.displayName = 'ModeMenu';
 
-const HeaderButtons = memo(({ onSettingsOpen, onNewHistory, setMode, currentMode, isElectron }: HeaderButtonsProps) => (
+const HeaderButtons = memo(({ onSettingsOpen, setMode, currentMode, isElectron }: HeaderButtonsProps) => (
   <Box display="flex" gap={1}>
     <Button onClick={onSettingsOpen}>
       <FiSettings />
-    </Button>
-
-    <GroupDrawer>
-      <Button>
-        <FiUsers />
-      </Button>
-    </GroupDrawer>
-
-    <HistoryDrawer>
-      <Button>
-        <FiClock />
-      </Button>
-    </HistoryDrawer>
-
-    <Button onClick={onNewHistory}>
-      <FiPlus />
     </Button>
 
     <ModeMenu setMode={setMode} currentMode={currentMode} isElectron={isElectron} />
@@ -110,10 +91,9 @@ const HeaderButtons = memo(({ onSettingsOpen, onNewHistory, setMode, currentMode
 
 HeaderButtons.displayName = 'HeaderButtons';
 
-const SidebarContent = memo(({ 
-  onSettingsOpen, 
-  onNewHistory, 
-  setMode, 
+const SidebarContent = memo(({
+  onSettingsOpen,
+  setMode,
   currentMode,
   isElectron
 }: HeaderButtonsProps) => (
@@ -121,7 +101,6 @@ const SidebarContent = memo(({
     <Box {...sidebarStyles.sidebar.header}>
       <HeaderButtons
         onSettingsOpen={onSettingsOpen}
-        onNewHistory={onNewHistory}
         setMode={setMode}
         currentMode={currentMode}
         isElectron={isElectron}
@@ -140,7 +119,6 @@ function Sidebar({ isCollapsed = false, onToggle }: SidebarProps): JSX.Element {
     settingsOpen,
     onSettingsOpen,
     onSettingsClose,
-    createNewHistory,
     setMode,
     currentMode,
     isElectron,
@@ -153,7 +131,6 @@ function Sidebar({ isCollapsed = false, onToggle }: SidebarProps): JSX.Element {
       {!isCollapsed && !settingsOpen && (
         <SidebarContent
           onSettingsOpen={onSettingsOpen}
-          onNewHistory={createNewHistory}
           setMode={setMode}
           currentMode={currentMode}
           isElectron={isElectron}

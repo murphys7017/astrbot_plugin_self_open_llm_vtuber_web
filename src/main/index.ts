@@ -11,6 +11,10 @@ let isQuitting = false;
 function setupIPC(): void {
   ipcMain.handle("get-platform", () => process.platform);
 
+  ipcMain.on("toggle-devtools", () => {
+    windowManager.toggleDevTools();
+  });
+
   ipcMain.on("set-ignore-mouse-events", (_event, ignore: boolean) => {
     const window = windowManager.getWindow();
     if (window) {
@@ -77,7 +81,10 @@ app.whenReady().then(() => {
   electronApp.setAppUserModelId("com.electron");
 
   windowManager = new WindowManager();
-  menuManager = new MenuManager((mode) => windowManager.setWindowMode(mode));
+  menuManager = new MenuManager(
+    (mode) => windowManager.setWindowMode(mode),
+    () => windowManager.toggleDevTools(),
+  );
 
   const window = windowManager.createWindow({
     titleBarOverlay: {
@@ -95,19 +102,15 @@ app.whenReady().then(() => {
     }
     return false;
   });
+  const devToolsShortcuts = process.platform === "darwin"
+    ? ["F12", "Command+Alt+I"]
+    : ["F12", "Control+Shift+I"];
 
-  // if (process.env.NODE_ENV === "development") {
-  //   globalShortcut.register("F12", () => {
-  //     const window = windowManager.getWindow();
-  //     if (!window) return;
-
-  //     if (window.webContents.isDevToolsOpened()) {
-  //       window.webContents.closeDevTools();
-  //     } else {
-  //       window.webContents.openDevTools();
-  //     }
-  //   });
-  // }
+  devToolsShortcuts.forEach((shortcut) => {
+    globalShortcut.register(shortcut, () => {
+      windowManager.toggleDevTools();
+    });
+  });
 
   setupIPC();
 
