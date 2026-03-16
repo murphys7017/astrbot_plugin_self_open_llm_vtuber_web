@@ -18,7 +18,6 @@ import { toaster } from '@/components/ui/toaster';
 import { useVAD } from '@/context/vad-context';
 import { AiState, useAiState } from "@/context/ai-state-context";
 import { useLocalStorage } from '@/hooks/utils/use-local-storage';
-import { useGroup } from '@/context/group-context';
 import { useInterrupt } from '@/hooks/utils/use-interrupt';
 import { useBrowser } from '@/context/browser-context';
 
@@ -35,7 +34,6 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
   const bgUrlContext = useBgUrl();
   const { confUid, setConfName, setConfUid, setConfigFiles } = useConfig();
   const [pendingModelInfo, setPendingModelInfo] = useState<ModelInfo | undefined>(undefined);
-  const { setSelfUid, setGroupMembers, setIsOwner } = useGroup();
   const { startMic, stopMic, autoStartMicOnConvEnd } = useVAD();
   const autoStartMicOnConvEndRef = useRef(autoStartMicOnConvEnd);
   const { interrupt } = useInterrupt();
@@ -107,9 +105,6 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         if (message.conf_uid) {
           setConfUid(message.conf_uid);
           console.log('confUid', message.conf_uid);
-        }
-        if (message.client_uid) {
-          setSelfUid(message.client_uid);
         }
         setPendingModelInfo(message.model_info);
         // setModelInfo(message.model_info);
@@ -227,22 +222,6 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
           duration: 2000,
         });
         break;
-      case 'group-update':
-        console.log('Received group-update:', message.members);
-        if (message.members) {
-          setGroupMembers(message.members);
-        }
-        if (message.is_owner !== undefined) {
-          setIsOwner(message.is_owner);
-        }
-        break;
-      case 'group-operation-result':
-        toaster.create({
-          title: message.message,
-          type: message.success ? 'success' : 'error',
-          duration: 2000,
-        });
-        break;
       case 'backend-synth-complete':
         setBackendSynthComplete(true);
         break;
@@ -289,7 +268,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
       default:
         console.warn('Unknown message type:', message.type);
     }
-  }, [aiState, addAudioTask, appendHumanMessage, baseUrl, bgUrlContext, setAiState, setConfName, setConfUid, setConfigFiles, setCurrentHistoryUid, setHistoryList, setMessages, setModelInfo, setSubtitleText, startMic, stopMic, setSelfUid, setGroupMembers, setIsOwner, backendSynthComplete, setBackendSynthComplete, clearResponse, handleControlMessage, appendOrUpdateToolCallMessage, interrupt, setBrowserViewData, t]);
+  }, [aiState, addAudioTask, appendHumanMessage, baseUrl, bgUrlContext, setAiState, setConfName, setConfUid, setConfigFiles, setCurrentHistoryUid, setHistoryList, setMessages, setModelInfo, setSubtitleText, startMic, stopMic, backendSynthComplete, setBackendSynthComplete, clearResponse, handleControlMessage, appendOrUpdateToolCallMessage, interrupt, setBrowserViewData, t]);
 
   useEffect(() => {
     wsService.connect(wsUrl);

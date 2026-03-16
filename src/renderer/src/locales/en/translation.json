@@ -82,22 +82,6 @@
     "noBrowserSession": "No active browser session",
     "browserSession": "Browser Session"
   },
-  "group": {
-    "management": "Group Management",
-    "yourUuid": "Your UUID",
-    "inviteMember": "Invite Member",
-    "enterMemberUuid": "Enter member UUID",
-    "invite": "Invite",
-    "members": "Members",
-    "you": "You",
-    "leaveGroup": "Leave Group",
-    "removeMember": "Remove Member",
-    "leave": "Leave"
-  },
-  "history": {
-    "chatHistoryList": "Chat History List",
-    "noMessages": "No messages"
-  },
   "notification": {
     "characterLoaded": "New Character Loaded",
     "characterSwitched": "Character switched",
@@ -116,8 +100,6 @@
     "failedStartVAD": "Failed to start VAD",
     "llmCantHear": "The LLM can't hear you.",
     "audioPlayback": "Audio playback error",
-    "enterValidUuid": "Please enter a valid UUID",
-    "cannotDeleteCurrentHistory": "Cannot delete current chat history",
     "failedCapture": "Failed to capture {{source}} frame",
     "failedParseWebSocket": "Failed to parse WebSocket message",
     "websocketNotOpen": "WebSocket is not open.",

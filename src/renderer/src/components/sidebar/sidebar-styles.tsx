@@ -1,7 +1,5 @@
 import { css } from '@emotion/react';
 
-const isElectron = window.api !== undefined;
-
 const commonStyles = {
   scrollbar: {
     '&::-webkit-scrollbar': {
@@ -163,80 +161,6 @@ export const sidebarStyles = {
     },
   },
 
-  historyDrawer: {
-    listContainer: {
-      flex: 1,
-      overflowY: 'auto',
-      px: 4,
-      py: 2,
-      css: commonStyles.scrollbar,
-    },
-    historyItem: {
-      mb: 4,
-      p: 3,
-      borderRadius: 'md',
-      bg: 'whiteAlpha.50',
-      cursor: 'pointer',
-      transition: 'all 0.2s',
-      _hover: {
-        bg: 'whiteAlpha.100',
-      },
-    },
-    historyItemSelected: {
-      bg: 'whiteAlpha.200',
-      borderLeft: '3px solid',
-      borderColor: 'blue.500',
-    },
-    historyHeader: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      mb: 2,
-    },
-    timestamp: {
-      fontSize: 'sm',
-      color: 'whiteAlpha.700',
-      fontFamily: 'mono',
-    },
-    deleteButton: {
-      variant: 'ghost' as const,
-      colorScheme: 'red' as const,
-      size: 'sm' as const,
-      color: 'red.300',
-      opacity: 0.8,
-      _hover: {
-        opacity: 1,
-        bg: 'whiteAlpha.200',
-      },
-    },
-    messagePreview: {
-      fontSize: 'sm',
-      color: 'whiteAlpha.900',
-      noOfLines: 2,
-      overflow: 'hidden',
-      textOverflow: 'ellipsis',
-    },
-    drawer: {
-      content: {
-        background: 'var(--chakra-colors-gray-900)',
-        maxWidth: '440px',
-        marginTop: isElectron ? '30px' : '0',
-        height: isElectron ? 'calc(100vh - 30px)' : '100vh',
-      },
-      title: {
-        color: 'white',
-      },
-      closeButton: {
-        color: 'white',
-      },
-      actionButton: {
-        color: 'white',
-        borderColor: 'white',
-        variant: 'outline' as const,
-      },
-    },
-  },
-
   cameraPanel: {
     container: {
       width: '97%',
@@ -374,70 +298,6 @@ export const sidebarStyles = {
         color: 'white',
         bg: 'whiteAlpha.200',
       },
-    },
-  },
-
-  groupDrawer: {
-    section: {
-      mb: 6,
-    },
-    sectionTitle: {
-      fontSize: 'lg',
-      fontWeight: 'semibold',
-      color: 'white',
-      mb: 3,
-    },
-    inviteBox: {
-      display: 'flex',
-      gap: 2,
-    },
-    input: {
-      bg: 'whiteAlpha.100',
-      border: 'none',
-      color: 'white',
-      _placeholder: {
-        color: 'whiteAlpha.400',
-      },
-    },
-    memberList: {
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 2,
-    },
-    memberItem: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      p: 2,
-      borderRadius: 'md',
-      bg: 'whiteAlpha.100',
-    },
-    memberText: {
-      color: 'white',
-      fontSize: 'sm',
-    },
-    removeButton: {
-      size: 'sm',
-      color: 'red.300',
-      bg: 'transparent',
-      _hover: {
-        bg: 'whiteAlpha.200',
-      },
-    },
-    button: {
-      color: 'white',
-      bg: 'whiteAlpha.100',
-      _hover: {
-        bg: 'whiteAlpha.200',
-      },
-    },
-    clipboardButton: {
-      color: 'white',
-      bg: 'transparent',
-      _hover: {
-        bg: 'whiteAlpha.200',
-      },
-      size: 'sm',
     },
   },
 

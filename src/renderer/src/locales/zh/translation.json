@@ -79,22 +79,6 @@
     "noBrowserSession": "无活跃浏览器会话",
     "browserSession": "浏览器会话"
   },
-  "group": {
-    "management": "群组管理",
-    "yourUuid": "您的UUID",
-    "inviteMember": "邀请成员",
-    "enterMemberUuid": "输入成员UUID",
-    "invite": "邀请",
-    "members": "成员",
-    "you": "您",
-    "leaveGroup": "离开群组",
-    "removeMember": "移除成员",
-    "leave": "离开"
-  },
-  "history": {
-    "chatHistoryList": "聊天历史列表",
-    "noMessages": "暂无消息"
-  },
   "notification": {
     "characterLoaded": "新角色已加载",
     "characterSwitched": "角色已切换",
@@ -113,8 +97,6 @@
     "failedStartVAD": "启动语音活动检测失败",
     "llmCantHear": "AI无法听到您的声音",
     "audioPlayback": "音频播放错误",
-    "enterValidUuid": "请输入有效的UUID",
-    "cannotDeleteCurrentHistory": "无法删除当前聊天记录",
     "failedCapture": "捕获{{source}}帧失败",
     "failedParseWebSocket": "解析WebSocket消息失败",
     "websocketNotOpen": "WebSocket未连接",
