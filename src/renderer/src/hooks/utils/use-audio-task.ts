@@ -34,7 +34,7 @@ export const useAudioTask = () => {
   const { t } = useTranslation();
   const { aiState, backendSynthComplete, setBackendSynthComplete } = useAiState();
   const { setSubtitleText } = useSubtitle();
-  const { appendResponse, appendAIMessage } = useChatHistory();
+  const { appendResponse, appendAIMessage, fullResponse } = useChatHistory();
   const { sendMessage } = useWebSocket();
   const { setExpression } = useLive2DExpression();
 
@@ -44,6 +44,7 @@ export const useAudioTask = () => {
     setSubtitleText,
     appendResponse,
     appendAIMessage,
+    fullResponse,
   });
 
   // Note: currentAudioRef and currentModelRef are now managed by the global audioManager
@@ -53,6 +54,7 @@ export const useAudioTask = () => {
     setSubtitleText,
     appendResponse,
     appendAIMessage,
+    fullResponse,
   };
 
   /**
@@ -71,6 +73,7 @@ export const useAudioTask = () => {
       setSubtitleText: updateSubtitle,
       appendResponse: appendText,
       appendAIMessage: appendAI,
+      fullResponse: currentFullResponse,
     } = stateRef.current;
 
     // Skip if already interrupted
@@ -84,8 +87,11 @@ export const useAudioTask = () => {
 
     // Update display text
     if (displayText) {
-      appendText(displayText.text);
-      appendAI(displayText.text, displayText.name, displayText.avatar);
+      const shouldAppendToHistory = !currentFullResponse.endsWith(displayText.text);
+      if (shouldAppendToHistory) {
+        appendText(displayText.text);
+        appendAI(displayText.text, displayText.name, displayText.avatar);
+      }
       if (audioBase64) {
         updateSubtitle(displayText.text);
       }

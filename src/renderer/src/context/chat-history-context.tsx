@@ -4,6 +4,7 @@ import {
 } from 'react';
 import { Message } from '@/services/websocket-service';
 import { HistoryInfo } from './websocket-context';
+import { useLocalStorage } from '@/hooks/utils/use-local-storage';
 
 /**
  * Chat history context state interface
@@ -55,7 +56,8 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
   const [historyList, setHistoryList] = useState<HistoryInfo[]>(
     DEFAULT_HISTORY.historyList,
   );
-  const [currentHistoryUid, setCurrentHistoryUid] = useState<string | null>(
+  const [currentHistoryUid, setCurrentHistoryUid] = useLocalStorage<string | null>(
+    'currentHistoryUid',
     DEFAULT_HISTORY.currentHistoryUid,
   );
   const [fullResponse, setFullResponse] = useState(DEFAULT_HISTORY.fullResponse);

@@ -29,7 +29,16 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
   const { aiState, setAiState, backendSynthComplete, setBackendSynthComplete } = useAiState();
   const { setModelInfo } = useLive2DConfig();
   const { setSubtitleText } = useSubtitle();
-  const { clearResponse, setForceNewMessage, appendHumanMessage, appendOrUpdateToolCallMessage } = useChatHistory();
+  const {
+    clearResponse,
+    setForceNewMessage,
+    appendHumanMessage,
+    appendAIMessage,
+    appendResponse,
+    appendOrUpdateToolCallMessage,
+    fullResponse,
+    currentHistoryUid,
+  } = useChatHistory();
   const { addAudioTask } = useAudioTask();
   const bgUrlContext = useBgUrl();
   const { confUid, setConfName, setConfUid, setConfigFiles } = useConfig();
@@ -120,6 +129,20 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
       case 'full-text':
         if (message.text) {
           setSubtitleText(message.text);
+          if (message.text === fullResponse || fullResponse.startsWith(message.text)) {
+            break;
+          }
+
+          if (fullResponse && message.text.startsWith(fullResponse)) {
+            const delta = message.text.slice(fullResponse.length);
+            if (delta) {
+              appendResponse(delta);
+              appendAIMessage(delta);
+            }
+          } else if (!fullResponse) {
+            appendResponse(message.text);
+            appendAIMessage(message.text);
+          }
         }
         break;
       case 'config-files':
@@ -140,7 +163,6 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         // setModelInfo(undefined);
 
         wsService.sendMessage({ type: 'fetch-history-list' });
-        wsService.sendMessage({ type: 'create-new-history' });
         break;
       case 'background-files':
         if (message.files) {
@@ -174,9 +196,8 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         break;
       case 'new-history-created':
         setAiState('idle');
-        setSubtitleText(t('notification.newConversation'));
-        // No need to open mic here
-        if (message.history_uid) {
+        if (message.history_uid && !currentHistoryUid) {
+          setSubtitleText(t('notification.newConversation'));
           setCurrentHistoryUid(message.history_uid);
           setMessages([]);
           const newHistory: HistoryInfo = {
@@ -205,7 +226,18 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         if (message.histories) {
           setHistoryList(message.histories);
           if (message.histories.length > 0) {
-            setCurrentHistoryUid(message.histories[0].uid);
+            const preferredHistoryUid = currentHistoryUid
+              && message.histories.some((history) => history.uid === currentHistoryUid)
+              ? currentHistoryUid
+              : message.histories[0].uid;
+            setCurrentHistoryUid(preferredHistoryUid);
+            wsService.sendMessage({
+              type: 'fetch-and-set-history',
+              history_uid: preferredHistoryUid,
+            });
+          } else {
+            setCurrentHistoryUid(null);
+            setMessages([]);
           }
         }
         break;
@@ -268,7 +300,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
       default:
         console.warn('Unknown message type:', message.type);
     }
-  }, [aiState, addAudioTask, appendHumanMessage, baseUrl, bgUrlContext, setAiState, setConfName, setConfUid, setConfigFiles, setCurrentHistoryUid, setHistoryList, setMessages, setModelInfo, setSubtitleText, startMic, stopMic, backendSynthComplete, setBackendSynthComplete, clearResponse, handleControlMessage, appendOrUpdateToolCallMessage, interrupt, setBrowserViewData, t]);
+  }, [aiState, addAudioTask, appendAIMessage, appendHumanMessage, appendResponse, baseUrl, bgUrlContext, setAiState, setConfName, setConfUid, setConfigFiles, setCurrentHistoryUid, setHistoryList, setMessages, setModelInfo, setSubtitleText, startMic, stopMic, backendSynthComplete, setBackendSynthComplete, clearResponse, fullResponse, handleControlMessage, appendOrUpdateToolCallMessage, interrupt, setBrowserViewData, t]);
 
   useEffect(() => {
     wsService.connect(wsUrl);

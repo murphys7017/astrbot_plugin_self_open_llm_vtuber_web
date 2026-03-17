@@ -133,9 +133,6 @@ class WebSocketService {
     this.sendMessage({
       type: 'fetch-history-list',
     });
-    this.sendMessage({
-      type: 'create-new-history',
-    });
   }
 
   connect(url: string) {
