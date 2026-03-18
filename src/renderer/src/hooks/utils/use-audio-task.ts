@@ -377,6 +377,17 @@ export const useAudioTask = () => {
 
           let isFinished = false;
           let playbackStarted = false;
+          let playbackVisualsCleared = false;
+
+          const clearPlaybackVisuals = () => {
+            if (playbackVisualsCleared) {
+              return;
+            }
+
+            playbackVisualsCleared = true;
+            updateSubtitle('');
+            resetModelExpression();
+          };
 
           const cleanup = () => {
             audioManager.clearCurrentAudio(audio);
@@ -462,11 +473,13 @@ export const useAudioTask = () => {
           });
 
           audio.addEventListener('ended', () => {
+            clearPlaybackVisuals();
             cleanup();
           });
 
           audio.addEventListener('error', (error) => {
             console.error("Audio playback error:", error);
+            clearPlaybackVisuals();
             cleanup();
           });
 
@@ -490,8 +503,6 @@ export const useAudioTask = () => {
     const handleComplete = async () => {
       await audioTaskQueue.waitForCompletion();
       if (isMounted && backendSynthComplete) {
-        stopCurrentAudioAndLipSync();
-        setSubtitleText('');
         sendMessage({ type: "frontend-playback-complete" });
         setBackendSynthComplete(false);
       }
@@ -502,7 +513,7 @@ export const useAudioTask = () => {
     return () => {
       isMounted = false;
     };
-  }, [backendSynthComplete, sendMessage, setBackendSynthComplete, stopCurrentAudioAndLipSync]);
+  }, [backendSynthComplete, sendMessage, setBackendSynthComplete]);
 
   /**
    * Add a new audio task to the queue
