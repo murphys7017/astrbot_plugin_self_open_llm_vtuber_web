@@ -16,7 +16,7 @@ import { useLive2DConfig } from '@/context/live2d-config-context';
 import * as LAppDefine from '../../../WebSDK/src/lappdefine';
 
 interface AudioTaskOptions {
-  audioBase64: string
+  audioUrl: string
   volumes: number[]
   sliceLength: number
   displayText?: DisplayText | null
@@ -141,7 +141,7 @@ export const useAudioTask = () => {
     }
 
     const {
-      audioBase64,
+      audioUrl,
       displayText,
       expressions,
       expressionDecision,
@@ -160,15 +160,12 @@ export const useAudioTask = () => {
         appendText(displayText.text);
         appendAI(displayText.text, displayText.name, displayText.avatar);
       }
-      if (audioBase64) {
-        updateSubtitle(displayText.text);
-      }
     }
 
     try {
       if (!lappAdapter) {
         console.warn('[AudioTask] LAppAdapter not found for expression handling');
-      } else if (!audioBase64 && expressionValue !== null) {
+      } else if (!audioUrl && expressionValue !== null) {
         console.log('[AudioTask] Applying expression without audio:', expressionValue);
         try {
           const applied = await setExpressionWithRetry(
@@ -194,10 +191,8 @@ export const useAudioTask = () => {
       }
 
       // Process audio if available
-      if (audioBase64) {
+      if (audioUrl) {
         await new Promise<void>((resolve) => {
-          const audioDataUrl = `data:audio/wav;base64,${audioBase64}`;
-
           // Get Live2D manager and model
           const live2dManager = (window as any).getLive2DManager?.();
           if (!live2dManager) {
@@ -232,7 +227,7 @@ export const useAudioTask = () => {
           }
 
           // Setup audio element
-          const audio = new Audio(audioDataUrl);
+          const audio = new Audio(audioUrl);
 
           let isFinished = false;
           let playbackStarted = false;
@@ -258,6 +253,10 @@ export const useAudioTask = () => {
 
             playbackStarted = true;
             console.log('Audio playback started, syncing expression and lip sync');
+
+            if (displayText) {
+              updateSubtitle(displayText.text);
+            }
 
             if (displayText && !forwarded) {
               sendMessage({
@@ -304,7 +303,7 @@ export const useAudioTask = () => {
               }
 
               if (audioManager.hasCurrentAudio()) {
-                model._wavFileHandler.start(audioDataUrl);
+                model._wavFileHandler.start(audioUrl);
               } else {
                 console.warn('WavFileHandler start skipped - audio was stopped');
               }

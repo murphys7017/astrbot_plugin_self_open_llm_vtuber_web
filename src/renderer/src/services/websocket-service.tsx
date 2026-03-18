@@ -20,7 +20,7 @@ interface BackgroundFile {
 
 export interface AudioPayload {
   type: 'audio';
-  audio?: string;
+  audio_url?: string;
   volumes?: number[];
   slice_length?: number;
   display_text?: DisplayText;
@@ -61,7 +61,7 @@ export interface MessageEvent {
   content: string;
   timestamp: string;
   type: string;
-  audio?: string;
+  audio_url?: string;
   volumes?: number[];
   slice_length?: number;
   files?: BackgroundFile[];

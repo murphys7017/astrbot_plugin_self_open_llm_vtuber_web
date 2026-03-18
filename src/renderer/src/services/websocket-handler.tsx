@@ -191,7 +191,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
           console.log("actions received:", message.actions);
           console.log("expressions in actions:", message.actions?.expressions);
           addAudioTask({
-            audioBase64: message.audio || '',
+            audioUrl: message.audio_url || '',
             volumes: message.volumes || [],
             sliceLength: message.slice_length || 0,
             displayText: message.display_text || null,
