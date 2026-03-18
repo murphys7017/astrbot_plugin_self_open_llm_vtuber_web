@@ -21,12 +21,66 @@ import { useLocalStorage } from '@/hooks/utils/use-local-storage';
 import { useInterrupt } from '@/hooks/utils/use-interrupt';
 import { useBrowser } from '@/context/browser-context';
 
+const normalizeModelInfo = (modelInfo: ModelInfo | undefined, baseUrl: string) => {
+  if (!modelInfo) {
+    return modelInfo;
+  }
+
+  const url = typeof modelInfo.url === 'string' ? modelInfo.url : '';
+  if (!url || url.startsWith('http')) {
+    return modelInfo;
+  }
+
+  return {
+    ...modelInfo,
+    url: `${baseUrl}${url}`,
+  };
+};
+
+const appendFullTextDelta = (
+  text: string,
+  fullResponse: string,
+  appendResponse: (delta: string) => void,
+  appendAIMessage: (delta: string) => void,
+) => {
+  if (text === fullResponse || fullResponse.startsWith(text)) {
+    return;
+  }
+
+  if (fullResponse && text.startsWith(fullResponse)) {
+    const delta = text.slice(fullResponse.length);
+    if (delta) {
+      appendResponse(delta);
+      appendAIMessage(delta);
+    }
+    return;
+  }
+
+  if (!fullResponse) {
+    appendResponse(text);
+    appendAIMessage(text);
+  }
+};
+
+const resolvePreferredHistoryUid = (
+  histories: HistoryInfo[],
+  currentHistoryUid: string | null,
+) => {
+  if (!histories.length) {
+    return null;
+  }
+
+  return currentHistoryUid && histories.some((history) => history.uid === currentHistoryUid)
+    ? currentHistoryUid
+    : histories[0].uid;
+};
+
 function WebSocketHandler({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
   const [wsState, setWsState] = useState<string>('CLOSED');
   const [wsUrl, setWsUrl] = useLocalStorage<string>('wsUrl', defaultWsUrl);
   const [baseUrl, setBaseUrl] = useLocalStorage<string>('baseUrl', defaultBaseUrl);
-  const { aiState, setAiState, backendSynthComplete, setBackendSynthComplete } = useAiState();
+  const { aiState, setAiState, setBackendSynthComplete } = useAiState();
   const { setModelInfo } = useLive2DConfig();
   const { setSubtitleText } = useSubtitle();
   const {
@@ -38,6 +92,9 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
     appendOrUpdateToolCallMessage,
     fullResponse,
     currentHistoryUid,
+    setCurrentHistoryUid,
+    setMessages,
+    setHistoryList,
   } = useChatHistory();
   const { addAudioTask, stopCurrentAudioAndLipSync } = useAudioTask();
   const bgUrlContext = useBgUrl();
@@ -59,18 +116,12 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
     }
   }, [pendingModelInfo, setModelInfo, confUid]);
 
-  const {
-    setCurrentHistoryUid, setMessages, setHistoryList,
-  } = useChatHistory();
-
   const handleControlMessage = useCallback((controlText: string) => {
     switch (controlText) {
       case 'start-mic':
-        console.log('Starting microphone...');
         startMic();
         break;
       case 'stop-mic':
-        console.log('Stopping microphone...');
         stopMic();
         break;
       case 'conversation-chain-start':
@@ -97,10 +148,9 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
       default:
         console.warn('Unknown control command:', controlText);
     }
-  }, [clearResponse, setAiState, setForceNewMessage, startMic, stopCurrentAudioAndLipSync, stopMic]);
+  }, [clearResponse, setAiState, startMic, stopCurrentAudioAndLipSync, stopMic]);
 
   const handleWebSocketMessage = useCallback((message: MessageEvent) => {
-    console.log('Received message from server:', message);
     switch (message.type) {
       case 'control':
         if (message.text) {
@@ -114,50 +164,15 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         }
         if (message.conf_uid) {
           setConfUid(message.conf_uid);
-          console.log('confUid', message.conf_uid);
         }
-        {
-          let normalizedModelInfo = message.model_info;
-
-          // We don't know when the confRef in live2d-config-context will be updated,
-          // so normalize the model info payload before storing it.
-          if (normalizedModelInfo) {
-            const url = typeof normalizedModelInfo.url === 'string'
-              ? normalizedModelInfo.url
-              : '';
-
-            if (url && !url.startsWith("http")) {
-              normalizedModelInfo = {
-                ...normalizedModelInfo,
-                url: baseUrl + url,
-              };
-            } else if (!url) {
-              console.warn('Received model_info without a valid url:', normalizedModelInfo);
-            }
-          }
-
-          setPendingModelInfo(normalizedModelInfo);
-        }
+        setPendingModelInfo(normalizeModelInfo(message.model_info, baseUrl));
 
         setAiState('idle');
         break;
       case 'full-text':
         if (message.text) {
           setSubtitleText(message.text);
-          if (message.text === fullResponse || fullResponse.startsWith(message.text)) {
-            break;
-          }
-
-          if (fullResponse && message.text.startsWith(fullResponse)) {
-            const delta = message.text.slice(fullResponse.length);
-            if (delta) {
-              appendResponse(delta);
-              appendAIMessage(delta);
-            }
-          } else if (!fullResponse) {
-            appendResponse(message.text);
-            appendAIMessage(message.text);
-          }
+          appendFullTextDelta(message.text, fullResponse, appendResponse, appendAIMessage);
         }
         break;
       case 'config-files':
@@ -185,15 +200,9 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         }
         break;
       case 'audio':
-        if (aiState === 'interrupted' || aiState === 'listening') {
-          console.log('Audio playback intercepted. Sentence:', message.display_text?.text);
-        } else {
-          console.log("actions received:", message.actions);
-          console.log("expressions in actions:", message.actions?.expressions);
+        if (aiState !== 'interrupted' && aiState !== 'listening') {
           addAudioTask({
             audioUrl: message.audio_url || '',
-            volumes: message.volumes || [],
-            sliceLength: message.slice_length || 0,
             displayText: message.display_text || null,
             expressions: message.actions?.expressions || null,
             expressionDecision: message.actions?.expression_decision || null,
@@ -242,11 +251,11 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
       case 'history-list':
         if (message.histories) {
           setHistoryList(message.histories);
-          if (message.histories.length > 0) {
-            const preferredHistoryUid = currentHistoryUid
-              && message.histories.some((history) => history.uid === currentHistoryUid)
-              ? currentHistoryUid
-              : message.histories[0].uid;
+          const preferredHistoryUid = resolvePreferredHistoryUid(
+            message.histories,
+            currentHistoryUid,
+          );
+          if (preferredHistoryUid) {
             setCurrentHistoryUid(preferredHistoryUid);
             wsService.sendMessage({
               type: 'fetch-and-set-history',
@@ -259,7 +268,6 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         }
         break;
       case 'user-input-transcription':
-        console.log('user-input-transcription: ', message.text);
         if (message.text) {
           appendHumanMessage(message.text);
         }
@@ -293,9 +301,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         break;
       case 'tool_call_status':
         if (message.tool_id && message.tool_name && message.status) {
-          // If there's browser view data included, store it in the browser context
           if (message.browser_view) {
-            console.log('Browser view data received:', message.browser_view);
             setBrowserViewData(message.browser_view);
           }
 
@@ -317,7 +323,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
       default:
         console.warn('Unknown message type:', message.type);
     }
-  }, [aiState, addAudioTask, appendAIMessage, appendHumanMessage, appendResponse, baseUrl, bgUrlContext, setAiState, setConfName, setConfUid, setConfigFiles, setCurrentHistoryUid, setHistoryList, setMessages, setModelInfo, setSubtitleText, startMic, stopMic, backendSynthComplete, setBackendSynthComplete, clearResponse, fullResponse, handleControlMessage, appendOrUpdateToolCallMessage, interrupt, setBrowserViewData, t]);
+  }, [aiState, addAudioTask, appendAIMessage, appendHumanMessage, appendResponse, baseUrl, bgUrlContext, setAiState, setConfName, setConfUid, setConfigFiles, setCurrentHistoryUid, setHistoryList, setMessages, setSubtitleText, setBackendSynthComplete, fullResponse, handleControlMessage, appendOrUpdateToolCallMessage, interrupt, setBrowserViewData, t]);
 
   useEffect(() => {
     wsService.connect(wsUrl);

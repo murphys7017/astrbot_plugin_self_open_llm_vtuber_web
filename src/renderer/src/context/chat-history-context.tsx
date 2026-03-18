@@ -22,9 +22,7 @@ interface ChatHistoryState {
     value: HistoryInfo[] | ((prev: HistoryInfo[]) => HistoryInfo[])
   ) => void;
   setCurrentHistoryUid: (uid: string | null) => void;
-  updateHistoryList: (uid: string, latestMessage: Message | null) => void; // Use the unified Message type
   fullResponse: string;
-  setFullResponse: (text: string) => void;
   appendResponse: (text: string) => void;
   clearResponse: () => void;
   setForceNewMessage: (value: boolean) => void;
@@ -159,40 +157,6 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
     });
   }, []);
 
-  /**
-   * Update the history list with the latest message
-   * @param uid - History unique identifier
-   * @param latestMessage - Latest message to update with
-   */
-  const updateHistoryList = useCallback(
-    (uid: string, latestMessage: Message | null) => {
-      if (!uid) {
-        console.error('updateHistoryList: uid is null');
-      }
-      if (!currentHistoryUid) {
-        console.error('updateHistoryList: currentHistoryUid is null');
-      }
-
-      setHistoryList((prevList) => prevList.map((history) => {
-        if (history.uid === uid) {
-          return {
-            ...history,
-            latest_message: latestMessage
-              ? {
-                content: latestMessage.content,
-                role: latestMessage.role,
-                timestamp: latestMessage.timestamp,
-              }
-              : null,
-            timestamp: latestMessage?.timestamp || history.timestamp,
-          };
-        }
-        return history;
-      }));
-    },
-    [currentHistoryUid],
-  );
-
   const appendResponse = useCallback((text: string) => {
     setFullResponse((prev) => prev + (text || ''));
   }, []);
@@ -213,9 +177,7 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
       setMessages,
       setHistoryList,
       setCurrentHistoryUid,
-      updateHistoryList,
       fullResponse,
-      setFullResponse,
       appendResponse,
       clearResponse,
       setForceNewMessage,
@@ -227,7 +189,6 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
       appendHumanMessage,
       appendAIMessage,
       appendOrUpdateToolCallMessage, // Add dependency
-      updateHistoryList,
       fullResponse,
       appendResponse,
       clearResponse,

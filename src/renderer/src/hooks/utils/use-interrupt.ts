@@ -19,7 +19,6 @@ export const useInterrupt = () => {
 
   const interrupt = useCallback((sendSignal = true) => {
     if (aiState !== 'thinking-speaking') return;
-    console.log('Interrupting conversation chain');
 
     audioManager.stopCurrentAudioAndLipSync();
 
@@ -44,7 +43,6 @@ export const useInterrupt = () => {
     if (subtitleText === 'Thinking...') {
       setSubtitleText('');
     }
-    console.log('Interrupted!');
   }, [
     aiState,
     clearResponse,

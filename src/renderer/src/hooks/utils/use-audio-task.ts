@@ -17,8 +17,6 @@ import * as LAppDefine from '../../../WebSDK/src/lappdefine';
 
 interface AudioTaskOptions {
   audioUrl: string
-  volumes: number[]
-  sliceLength: number
   displayText?: DisplayText | null
   expressions?: string[] | number[] | null
   expressionDecision?: {
@@ -26,7 +24,6 @@ interface AudioTaskOptions {
     base_expression?: string
     reason?: string
   } | null
-  speaker_uid?: string
   forwarded?: boolean
 }
 
@@ -110,12 +107,10 @@ export const useAudioTask = () => {
 
     const mappedBase = findMappedExpression(baseExpression);
     if (mappedBase !== null) {
-      console.log('[AudioTask] Using base expression mapping:', baseExpression, '->', mappedBase);
       return mappedBase;
     }
 
     if (baseExpression) {
-      console.log('[AudioTask] Falling back to base expression name:', baseExpression);
       return baseExpression;
     }
 
@@ -148,8 +143,6 @@ export const useAudioTask = () => {
       forwarded,
     } = options;
 
-    console.log('[AudioTask] Received expressions:', expressions);
-    console.log('[AudioTask] Received expression decision:', expressionDecision);
     const expressionValue = resolvePlaybackExpression(expressions, expressionDecision);
     const lappAdapter = (window as any).getLAppAdapter?.();
 
@@ -166,7 +159,6 @@ export const useAudioTask = () => {
       if (!lappAdapter) {
         console.warn('[AudioTask] LAppAdapter not found for expression handling');
       } else if (!audioUrl && expressionValue !== null) {
-        console.log('[AudioTask] Applying expression without audio:', expressionValue);
         try {
           const applied = await setExpressionWithRetry(
             expressionValue,
@@ -186,8 +178,6 @@ export const useAudioTask = () => {
         } catch (err) {
           console.error('[AudioTask] Failed to set expression:', err);
         }
-      } else if (expressionValue === null) {
-        console.log('[AudioTask] No expressions provided');
       }
 
       // Process audio if available
@@ -207,17 +197,13 @@ export const useAudioTask = () => {
             resolve();
             return;
           }
-          console.log('Found model for audio playback');
 
           if (!model._wavFileHandler) {
             console.warn('Model does not have _wavFileHandler for lip sync');
-          } else {
-            console.log('Model has _wavFileHandler available');
           }
 
           // Start talk motion
           if (LAppDefine && LAppDefine.PriorityNormal) {
-            console.log("Starting random 'Talk' motion");
             model.startRandomMotion(
               "Talk",
               LAppDefine.PriorityNormal,
@@ -252,7 +238,6 @@ export const useAudioTask = () => {
             }
 
             playbackStarted = true;
-            console.log('Audio playback started, syncing expression and lip sync');
 
             if (displayText) {
               updateSubtitle(displayText.text);
@@ -267,7 +252,6 @@ export const useAudioTask = () => {
             }
 
             if (expressionValue !== null && lappAdapter) {
-              console.log('[AudioTask] Applying expression at playback start:', expressionValue);
               const applied = setExpression(
                 expressionValue,
                 lappAdapter,
@@ -290,7 +274,6 @@ export const useAudioTask = () => {
             // Setup lip sync when audio actually starts to keep both timelines aligned.
             if (model._wavFileHandler) {
               if (!model._wavFileHandler._initialized) {
-                console.log('Applying enhanced lip sync');
                 model._wavFileHandler._initialized = true;
 
                 const originalUpdate = model._wavFileHandler.update.bind(model._wavFileHandler);
@@ -320,7 +303,6 @@ export const useAudioTask = () => {
               return;
             }
 
-            console.log('Starting audio playback with lip sync');
             audio.play().catch((err) => {
               console.error("Audio play error:", err);
               cleanup();
@@ -328,7 +310,6 @@ export const useAudioTask = () => {
           });
 
           audio.addEventListener('ended', () => {
-            console.log("Audio playback completed");
             cleanup();
           });
 
@@ -378,11 +359,9 @@ export const useAudioTask = () => {
     const { aiState: currentState } = stateRef.current;
 
     if (currentState === 'interrupted') {
-      console.log('Skipping audio task due to interrupted state');
       return;
     }
 
-    console.log(`Adding audio task ${options.displayText?.text} to queue`);
     audioTaskQueue.addTask(() => handleAudioPlayback(options));
   };
 
