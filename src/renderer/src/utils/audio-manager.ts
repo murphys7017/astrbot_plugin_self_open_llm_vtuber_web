@@ -37,6 +37,8 @@ class AudioManager {
           model._wavFileHandler.releasePcmData();
           console.log('[AudioManager] Called _wavFileHandler.releasePcmData()');
 
+          model._wavFileHandler._syncAudioElement = null;
+
           // Additional reset of state variables as fallback
           model._wavFileHandler._lastRms = 0.0;
           model._wavFileHandler._sampleOffset = 0;
@@ -69,6 +71,9 @@ class AudioManager {
    */
   clearCurrentAudio(audio: HTMLAudioElement) {
     if (this.currentAudio === audio) {
+      if (this.currentModel?._wavFileHandler) {
+        this.currentModel._wavFileHandler._syncAudioElement = null;
+      }
       this.currentAudio = null;
       this.currentModel = null;
       this.currentStopHandler = null;

@@ -19,6 +19,7 @@ interface AudioTaskOptions {
   audioUrl: string
   displayText?: DisplayText | null
   expressions?: string[] | number[] | null
+  motions?: string[] | null
   expressionDecision?: {
     semantic_expression?: string
     base_expression?: string
@@ -117,6 +118,148 @@ export const useAudioTask = () => {
     return expressions?.[0] ?? null;
   }, [modelInfo?.emotionMap]);
 
+  const resolvePlaybackMotion = useCallback((model: any, motions?: string[] | null) => {
+    const motionCandidate = motions?.[0]?.trim();
+    const motionGroups = model?._modelSetting?._json?.FileReferences?.Motions;
+    if (!motionCandidate || !motionGroups) {
+      return null;
+    }
+
+    const normalizeMotionPath = (value?: string) => value
+      ?.replace(/\\/g, '/')
+      .replace(/^\.?\//, '')
+      .trim()
+      .toLowerCase() ?? '';
+
+    const candidatePath = normalizeMotionPath(motionCandidate);
+    const candidateFileName = candidatePath.split('/').pop() ?? candidatePath;
+
+    for (const [groupName, groupMotions] of Object.entries(motionGroups)) {
+      if (!Array.isArray(groupMotions)) {
+        continue;
+      }
+
+      for (const [index, motion] of groupMotions.entries()) {
+        const motionFile = typeof motion?.File === 'string' ? motion.File : '';
+        if (!motionFile) {
+          continue;
+        }
+
+        const normalizedMotionFile = normalizeMotionPath(motionFile);
+        const motionFileName = normalizedMotionFile.split('/').pop() ?? normalizedMotionFile;
+
+        if (
+          normalizedMotionFile === candidatePath
+          || motionFileName === candidateFileName
+        ) {
+          return {
+            groupName,
+            motionIndex: index,
+          };
+        }
+      }
+    }
+
+    return null;
+  }, []);
+
+  const playResolvedMotion = useCallback((model: any, motion: {
+    groupName: string
+    motionIndex: number
+  } | null, priority: number = LAppDefine?.PriorityNormal ?? 3) => {
+    if (!motion) {
+      return false;
+    }
+
+    try {
+      model.startMotion(motion.groupName, motion.motionIndex, priority);
+      return true;
+    } catch (error) {
+      console.error('[AudioTask] Failed to play motion:', error);
+      return false;
+    }
+  }, []);
+
+  const preloadLipSyncAudio = useCallback(async (model: any, audio: HTMLAudioElement, audioUrl: string) => {
+    const wavFileHandler = model?._wavFileHandler;
+    if (!wavFileHandler) {
+      return;
+    }
+
+    wavFileHandler.releasePcmData?.();
+    wavFileHandler._sampleOffset = 0;
+    wavFileHandler._userTimeSeconds = 0.0;
+    wavFileHandler._lastRms = 0.0;
+    wavFileHandler._syncAudioElement = audio;
+
+    if (!wavFileHandler._syncUpdatePatched) {
+      wavFileHandler._syncUpdatePatched = true;
+      const originalUpdate = wavFileHandler.update.bind(wavFileHandler);
+
+      wavFileHandler.update = function updateWithAudioClock(deltaTimeSeconds: number) {
+        const syncedAudio = this._syncAudioElement as HTMLAudioElement | null | undefined;
+        if (!syncedAudio) {
+          return originalUpdate(deltaTimeSeconds);
+        }
+
+        if (
+          this._pcmData == null ||
+          this._sampleOffset >= this._wavFileInfo._samplesPerChannel
+        ) {
+          this._lastRms = 0.0;
+          return false;
+        }
+
+        const syncedTimeSeconds = Math.max(0, syncedAudio.currentTime || 0);
+        let goalOffset = Math.floor(
+          syncedTimeSeconds * this._wavFileInfo._samplingRate,
+        );
+        if (goalOffset > this._wavFileInfo._samplesPerChannel) {
+          goalOffset = this._wavFileInfo._samplesPerChannel;
+        }
+
+        if (goalOffset <= this._sampleOffset) {
+          this._userTimeSeconds = syncedTimeSeconds;
+          if (syncedAudio.paused || syncedAudio.ended) {
+            this._lastRms = 0.0;
+          }
+          return false;
+        }
+
+        let rms = 0.0;
+        for (
+          let channelCount = 0;
+          channelCount < this._wavFileInfo._numberOfChannels;
+          channelCount++
+        ) {
+          for (
+            let sampleCount = this._sampleOffset;
+            sampleCount < goalOffset;
+            sampleCount++
+          ) {
+            const pcm = this._pcmData[channelCount][sampleCount];
+            rms += pcm * pcm;
+          }
+        }
+
+        const sampleWindow = goalOffset - this._sampleOffset;
+        rms = Math.sqrt(
+          rms / (this._wavFileInfo._numberOfChannels * sampleWindow),
+        );
+
+        this._lastRms = Math.min(2.0, rms * 2.0);
+        this._sampleOffset = goalOffset;
+        this._userTimeSeconds = syncedTimeSeconds;
+        return true;
+      };
+    }
+
+    const loaded = await wavFileHandler.loadWavFile(audioUrl);
+    if (!loaded) {
+      throw new Error('Failed to preload lip sync audio data');
+    }
+  }, []);
+
   /**
    * Handle audio playback with Live2D lip sync
    */
@@ -139,12 +282,17 @@ export const useAudioTask = () => {
       audioUrl,
       displayText,
       expressions,
+      motions,
       expressionDecision,
       forwarded,
     } = options;
 
     const expressionValue = resolvePlaybackExpression(expressions, expressionDecision);
     const lappAdapter = (window as any).getLAppAdapter?.();
+    const resolvedStandaloneMotion = resolvePlaybackMotion(
+      lappAdapter?.getModel?.(),
+      motions,
+    );
 
     // Update display text
     if (displayText) {
@@ -160,6 +308,10 @@ export const useAudioTask = () => {
         console.warn('[AudioTask] LAppAdapter not found for expression handling');
       } else if (!audioUrl && expressionValue !== null) {
         try {
+          if (resolvedStandaloneMotion) {
+            playResolvedMotion(lappAdapter?.getModel?.(), resolvedStandaloneMotion);
+          }
+
           const applied = await setExpressionWithRetry(
             expressionValue,
             lappAdapter,
@@ -178,6 +330,8 @@ export const useAudioTask = () => {
         } catch (err) {
           console.error('[AudioTask] Failed to set expression:', err);
         }
+      } else if (!audioUrl && resolvedStandaloneMotion) {
+        playResolvedMotion(lappAdapter.getModel?.(), resolvedStandaloneMotion);
       }
 
       // Process audio if available
@@ -198,12 +352,14 @@ export const useAudioTask = () => {
             return;
           }
 
+          const resolvedMotion = resolvePlaybackMotion(model, motions);
+
           if (!model._wavFileHandler) {
             console.warn('Model does not have _wavFileHandler for lip sync');
           }
 
           // Start talk motion
-          if (LAppDefine && LAppDefine.PriorityNormal) {
+          if (!resolvedMotion && LAppDefine && LAppDefine.PriorityNormal) {
             model.startRandomMotion(
               "Talk",
               LAppDefine.PriorityNormal,
@@ -214,6 +370,10 @@ export const useAudioTask = () => {
 
           // Setup audio element
           const audio = new Audio(audioUrl);
+          const lipSyncReadyPromise = preloadLipSyncAudio(model, audio, audioUrl)
+            .catch((error) => {
+              console.error('Failed to preload lip sync audio:', error);
+            });
 
           let isFinished = false;
           let playbackStarted = false;
@@ -228,9 +388,6 @@ export const useAudioTask = () => {
 
           // Register with global audio manager IMMEDIATELY after creating audio
           audioManager.setCurrentAudio(audio, model, cleanup);
-
-          // Enhance lip sync sensitivity
-          const lipSyncScale = 2.0;
 
           const handlePlaybackStart = () => {
             if (playbackStarted) {
@@ -271,34 +428,29 @@ export const useAudioTask = () => {
               }
             }
 
+            if (resolvedMotion) {
+              playResolvedMotion(model, resolvedMotion);
+            }
+
             // Setup lip sync when audio actually starts to keep both timelines aligned.
             if (model._wavFileHandler) {
-              if (!model._wavFileHandler._initialized) {
-                model._wavFileHandler._initialized = true;
-
-                const originalUpdate = model._wavFileHandler.update.bind(model._wavFileHandler);
-                model._wavFileHandler.update = function (deltaTimeSeconds: number) {
-                  const result = originalUpdate(deltaTimeSeconds);
-                  // @ts-ignore
-                  this._lastRms = Math.min(2.0, this._lastRms * lipSyncScale);
-                  return result;
-                };
-              }
-
-              if (audioManager.hasCurrentAudio()) {
-                model._wavFileHandler.start(audioUrl);
-              } else {
-                console.warn('WavFileHandler start skipped - audio was stopped');
-              }
+              model._wavFileHandler._syncAudioElement = audio;
             }
           };
 
-          audio.addEventListener('play', handlePlaybackStart);
+          audio.addEventListener('playing', handlePlaybackStart);
 
-          audio.addEventListener('canplaythrough', () => {
+          audio.addEventListener('canplaythrough', async () => {
             // Check for interruption before playback
             if (stateRef.current.aiState === 'interrupted' || !audioManager.hasCurrentAudio()) {
               console.warn('Audio playback cancelled due to interruption or audio was stopped');
+              cleanup();
+              return;
+            }
+
+            await lipSyncReadyPromise;
+
+            if (stateRef.current.aiState === 'interrupted' || !audioManager.hasCurrentAudio()) {
               cleanup();
               return;
             }

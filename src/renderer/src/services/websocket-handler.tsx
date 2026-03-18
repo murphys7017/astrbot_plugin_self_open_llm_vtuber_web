@@ -205,6 +205,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
             audioUrl: message.audio_url || '',
             displayText: message.display_text || null,
             expressions: message.actions?.expressions || null,
+            motions: message.actions?.motions || null,
             expressionDecision: message.actions?.expression_decision || null,
             forwarded: message.forwarded || false,
           });
