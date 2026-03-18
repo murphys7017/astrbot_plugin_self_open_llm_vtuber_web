@@ -1,16 +1,19 @@
 /* eslint-disable import/no-extraneous-dependencies */
 /* eslint-disable react/require-default-props */
-import { Stack } from '@chakra-ui/react';
-import { useEffect } from 'react';
+import { Stack, Text } from '@chakra-ui/react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { settingStyles } from './setting-styles';
 import { useASRSettings } from '@/hooks/sidebar/setting/use-asr-settings';
-import { SwitchField, NumberField } from './common';
+import { SwitchField, NumberField, SelectField } from './common';
+import { Button } from '@/components/ui/button';
 
 interface ASRProps {
   onSave?: (callback: () => void) => () => void
   onCancel?: (callback: () => void) => () => void
 }
+
+const UI_TIMEOUT_MS = 10000;
 
 function ASR({ onSave, onCancel }: ASRProps): JSX.Element {
   const { t } = useTranslation();
@@ -19,6 +22,11 @@ function ASR({ onSave, onCancel }: ASRProps): JSX.Element {
     autoStopMic,
     autoStartMicOn,
     autoStartMicOnConvEnd,
+    selectedMicId,
+    setSelectedMicId,
+    microphoneCollection,
+    refreshAudioInputDevices,
+    ensureMicrophonePermission,
     setAutoStopMic,
     setAutoStartMicOn,
     setAutoStartMicOnConvEnd,
@@ -26,6 +34,39 @@ function ASR({ onSave, onCancel }: ASRProps): JSX.Element {
     handleSave,
     handleCancel,
   } = useASRSettings();
+  const [requestingMicPermission, setRequestingMicPermission] = useState(false);
+
+  const withUiTimeout = async (task: () => Promise<void | boolean>) => {
+    await Promise.race([
+      task(),
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Microphone request timed out in UI')), UI_TIMEOUT_MS);
+      }),
+    ]);
+  };
+
+  const handleRequestMicrophoneAccess = async () => {
+    setRequestingMicPermission(true);
+    try {
+      await withUiTimeout(async () => {
+        await ensureMicrophonePermission();
+        await refreshAudioInputDevices();
+      });
+    } finally {
+      setRequestingMicPermission(false);
+    }
+  };
+
+  const handleRefreshDevices = async () => {
+    setRequestingMicPermission(true);
+    try {
+      await withUiTimeout(async () => {
+        await refreshAudioInputDevices();
+      });
+    } finally {
+      setRequestingMicPermission(false);
+    }
+  };
 
   useEffect(() => {
     if (!onSave || !onCancel) return;
@@ -41,6 +82,40 @@ function ASR({ onSave, onCancel }: ASRProps): JSX.Element {
 
   return (
     <Stack {...settingStyles.common.container}>
+      <SelectField
+        label={t('settings.asr.microphone')}
+        value={selectedMicId}
+        onChange={setSelectedMicId}
+        collection={microphoneCollection}
+        placeholder={t('settings.asr.selectMicrophone')}
+      />
+
+      {microphoneCollection.items.length === 0 && (
+        <Stack gap={2}>
+          <Text fontSize="sm" color="whiteAlpha.700">
+            {t('settings.asr.microphonePermissionHelp')}
+          </Text>
+          <Stack direction="row" gap={2}>
+            <Button
+              size="sm"
+              variant="outline"
+              loading={requestingMicPermission}
+              onClick={handleRequestMicrophoneAccess}
+            >
+              {t('settings.asr.requestMicrophonePermission')}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={requestingMicPermission}
+              onClick={handleRefreshDevices}
+            >
+              {t('settings.asr.refreshMicrophones')}
+            </Button>
+          </Stack>
+        </Stack>
+      )}
+
       <SwitchField
         label={t('settings.asr.autoStopMic')}
         checked={autoStopMic}

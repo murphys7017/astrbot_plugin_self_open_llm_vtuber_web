@@ -89,13 +89,15 @@ export function AiStateProvider({ children }: { children: ReactNode }) {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const setAiState = useCallback((newState: AiState | ((currentState: AiState) => AiState)) => {
-    const nextState = typeof newState === 'function'
-      ? (newState as (currentState: AiState) => AiState)(aiState)
-      : newState;
+    setAiStateInternal((currentState) => {
+      const nextState = typeof newState === 'function'
+        ? (newState as (currentState: AiState) => AiState)(currentState)
+        : newState;
 
-    if (nextState === AiStateEnum.WAITING) {
-      if (aiState !== AiStateEnum.THINKING_SPEAKING) {
-        setAiStateInternal(nextState);
+      if (nextState === AiStateEnum.WAITING) {
+        if (currentState === AiStateEnum.THINKING_SPEAKING) {
+          return currentState;
+        }
 
         if (timerRef.current) {
           clearTimeout(timerRef.current);
@@ -105,15 +107,18 @@ export function AiStateProvider({ children }: { children: ReactNode }) {
           setAiStateInternal(AiStateEnum.IDLE);
           timerRef.current = null;
         }, 2000);
+
+        return nextState;
       }
-    } else {
-      setAiStateInternal(nextState);
+
       if (timerRef.current) {
         clearTimeout(timerRef.current);
         timerRef.current = null;
       }
-    }
-  }, [aiState]);
+
+      return nextState;
+    });
+  }, []);
 
   // Memoized state checks
   const stateChecks = useMemo(

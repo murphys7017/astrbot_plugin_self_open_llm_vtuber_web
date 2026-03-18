@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useWebSocket } from '@/context/websocket-context';
 import { useAiState } from '@/context/ai-state-context';
-import { useInterrupt } from '@/components/canvas/live2d';
+import { useInterrupt } from '@/hooks/utils/use-interrupt';
 import { useChatHistory } from '@/context/chat-history-context';
 import { useVAD } from '@/context/vad-context';
 import { useMediaCapture } from '@/hooks/utils/use-media-capture';

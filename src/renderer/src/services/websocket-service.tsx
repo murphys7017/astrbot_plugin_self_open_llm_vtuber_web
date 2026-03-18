@@ -44,6 +44,11 @@ export interface Message {
 
 export interface Actions {
   expressions?: string[] | number [];
+  expression_decision?: {
+    semantic_expression?: string;
+    base_expression?: string;
+    reason?: string;
+  };
   pictures?: string[];
   sounds?: string[];
 }

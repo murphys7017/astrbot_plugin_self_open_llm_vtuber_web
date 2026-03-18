@@ -5,13 +5,15 @@
 class AudioManager {
   private currentAudio: HTMLAudioElement | null = null;
   private currentModel: any | null = null;
+  private currentStopHandler: (() => void) | null = null;
 
   /**
    * Set the current playing audio
    */
-  setCurrentAudio(audio: HTMLAudioElement, model: any) {
+  setCurrentAudio(audio: HTMLAudioElement, model: any, onStop?: () => void) {
     this.currentAudio = audio;
     this.currentModel = model;
+    this.currentStopHandler = onStop ?? null;
   }
 
   /**
@@ -49,9 +51,14 @@ class AudioManager {
         console.log('[AudioManager] No associated model found to stop lip sync.');
       }
 
-      // Clear references
+      const stopHandler = this.currentStopHandler;
+
+      // Clear references before invoking stop handler so repeated cleanup is safe.
       this.currentAudio = null;
       this.currentModel = null;
+      this.currentStopHandler = null;
+
+      stopHandler?.();
     } else {
       console.log('[AudioManager] No current audio playing to stop.');
     }
@@ -64,6 +71,7 @@ class AudioManager {
     if (this.currentAudio === audio) {
       this.currentAudio = null;
       this.currentModel = null;
+      this.currentStopHandler = null;
     }
   }
 

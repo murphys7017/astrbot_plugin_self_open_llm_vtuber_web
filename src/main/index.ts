@@ -1,5 +1,13 @@
 /* eslint-disable no-shadow */
-import { app, ipcMain, globalShortcut, desktopCapturer } from "electron";
+import {
+  app,
+  ipcMain,
+  globalShortcut,
+  desktopCapturer,
+  WebContents,
+  session,
+  Session,
+} from "electron";
 import { electronApp, optimizer } from "@electron-toolkit/utils";
 import { WindowManager } from "./window-manager";
 import { MenuManager } from "./menu-manager";
@@ -7,6 +15,46 @@ import { MenuManager } from "./menu-manager";
 let windowManager: WindowManager;
 let menuManager: MenuManager;
 let isQuitting = false;
+
+function isTrustedMediaOrigin(webContents: WebContents | null, requestingOrigin?: string): boolean {
+  const candidateOrigin = requestingOrigin || webContents?.getURL() || "";
+
+  if (!candidateOrigin) return false;
+
+  try {
+    const parsedUrl = new URL(candidateOrigin);
+    if (parsedUrl.protocol === "file:") {
+      return true;
+    }
+
+    if (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:") {
+      return parsedUrl.hostname === "localhost" || parsedUrl.hostname === "127.0.0.1";
+    }
+  } catch (_error) {
+    return candidateOrigin.startsWith("file://");
+  }
+
+  return false;
+}
+
+function configureSessionPermissions(targetSession: Session): void {
+  targetSession.setPermissionCheckHandler((webContents, permission, requestingOrigin) => {
+    if (permission === "media") {
+      return isTrustedMediaOrigin(webContents, requestingOrigin);
+    }
+
+    return false;
+  });
+
+  targetSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    if (permission === "media") {
+      callback(isTrustedMediaOrigin(webContents, details.requestingOrigin));
+      return;
+    }
+
+    callback(false);
+  });
+}
 
 function setupIPC(): void {
   ipcMain.handle("get-platform", () => process.platform);
@@ -80,6 +128,11 @@ function setupIPC(): void {
 app.whenReady().then(() => {
   electronApp.setAppUserModelId("com.electron");
 
+  configureSessionPermissions(session.defaultSession);
+  app.on("session-created", (createdSession) => {
+    configureSessionPermissions(createdSession);
+  });
+
   windowManager = new WindowManager();
   menuManager = new MenuManager(
     (mode) => windowManager.setWindowMode(mode),
@@ -123,16 +176,6 @@ app.whenReady().then(() => {
 
   app.on("browser-window-created", (_, window) => {
     optimizer.watchWindowShortcuts(window);
-  });
-
-  app.on('web-contents-created', (_, contents) => {
-    contents.session.setPermissionRequestHandler((webContents, permission, callback) => {
-      if (permission === 'media') {
-        callback(true);
-      } else {
-        callback(false);
-      }
-    });
   });
 });
 

@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
+import { createListCollection } from '@chakra-ui/react';
 import { useVAD, VADSettings } from '@/context/vad-context';
 
 export const useASRSettings = () => {
@@ -11,6 +12,11 @@ export const useASRSettings = () => {
     setAutoStartMicOn,
     autoStartMicOnConvEnd,
     setAutoStartMicOnConvEnd,
+    audioInputDevices,
+    selectedMicId,
+    setSelectedMicId,
+    refreshAudioInputDevices,
+    ensureMicrophonePermission,
   } = useVAD();
 
   const localSettingsRef = useRef<VADSettings>(settings);
@@ -18,16 +24,27 @@ export const useASRSettings = () => {
   const originalAutoStopMicRef = useRef(autoStopMic);
   const originalAutoStartMicOnRef = useRef(autoStartMicOn);
   const originalAutoStartMicOnConvEndRef = useRef(autoStartMicOnConvEnd);
+  const originalSelectedMicIdRef = useRef(selectedMicId);
   const [localVoiceInterruption, setLocalVoiceInterruption] = useState(autoStopMic);
   const [localAutoStartMic, setLocalAutoStartMic] = useState(autoStartMicOn);
   const [localAutoStartMicOnConvEnd, setLocalAutoStartMicOnConvEnd] = useState(autoStartMicOnConvEnd);
+  const [localSelectedMicId, setLocalSelectedMicId] = useState(selectedMicId);
   const [, forceUpdate] = React.useReducer((x) => x + 1, 0);
 
   useEffect(() => {
     setLocalVoiceInterruption(autoStopMic);
     setLocalAutoStartMic(autoStartMicOn);
     setLocalAutoStartMicOnConvEnd(autoStartMicOnConvEnd);
-  }, [autoStopMic, autoStartMicOn, autoStartMicOnConvEnd]);
+    setLocalSelectedMicId(selectedMicId);
+    originalSelectedMicIdRef.current = selectedMicId;
+  }, [autoStopMic, autoStartMicOn, autoStartMicOnConvEnd, selectedMicId]);
+
+  const microphoneCollection = createListCollection({
+    items: audioInputDevices.map((device) => ({
+      label: device.label,
+      value: device.deviceId,
+    })),
+  });
 
   const handleInputChange = (key: keyof VADSettings, value: number | string): void => {
     if (value === '' || value === '-') {
@@ -59,10 +76,12 @@ export const useASRSettings = () => {
 
   const handleSave = (): void => {
     updateSettings(localSettingsRef.current);
+    void setSelectedMicId(localSelectedMicId);
     originalSettingsRef.current = localSettingsRef.current;
     originalAutoStopMicRef.current = localVoiceInterruption;
     originalAutoStartMicOnRef.current = localAutoStartMic;
     originalAutoStartMicOnConvEndRef.current = localAutoStartMicOnConvEnd;
+    originalSelectedMicIdRef.current = localSelectedMicId;
   };
 
   const handleCancel = (): void => {
@@ -73,6 +92,7 @@ export const useASRSettings = () => {
     setAutoStartMicOn(originalAutoStartMicOnRef.current);
     setLocalAutoStartMicOnConvEnd(originalAutoStartMicOnConvEndRef.current);
     setAutoStartMicOnConvEnd(originalAutoStartMicOnConvEndRef.current);
+    setLocalSelectedMicId(originalSelectedMicIdRef.current);
     forceUpdate();
   };
 
@@ -81,6 +101,11 @@ export const useASRSettings = () => {
     autoStopMic: localVoiceInterruption,
     autoStartMicOn: localAutoStartMic,
     autoStartMicOnConvEnd: localAutoStartMicOnConvEnd,
+    selectedMicId: localSelectedMicId ? [localSelectedMicId] : [],
+    setSelectedMicId: (value: string[]) => setLocalSelectedMicId(value[0] ?? ''),
+    microphoneCollection,
+    refreshAudioInputDevices,
+    ensureMicrophonePermission,
     setAutoStopMic: handleVoiceInterruptionChange,
     setAutoStartMicOn: handleAutoStartMicChange,
     setAutoStartMicOnConvEnd: handleAutoStartMicOnConvEndChange,

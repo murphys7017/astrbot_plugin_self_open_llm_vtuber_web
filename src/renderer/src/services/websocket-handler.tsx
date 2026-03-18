@@ -10,7 +10,7 @@ import {
 import { ModelInfo, useLive2DConfig } from '@/context/live2d-config-context';
 import { useSubtitle } from '@/context/subtitle-context';
 import { audioTaskQueue } from '@/utils/task-queue';
-import { useAudioTask } from '@/components/canvas/live2d';
+import { useAudioTask } from '@/hooks/utils/use-audio-task';
 import { useBgUrl } from '@/context/bgurl-context';
 import { useConfig } from '@/context/character-config-context';
 import { useChatHistory } from '@/context/chat-history-context';
@@ -39,7 +39,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
     fullResponse,
     currentHistoryUid,
   } = useChatHistory();
-  const { addAudioTask } = useAudioTask();
+  const { addAudioTask, stopCurrentAudioAndLipSync } = useAudioTask();
   const bgUrlContext = useBgUrl();
   const { confUid, setConfName, setConfUid, setConfigFiles } = useConfig();
   const [pendingModelInfo, setPendingModelInfo] = useState<ModelInfo | undefined>(undefined);
@@ -74,8 +74,9 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         stopMic();
         break;
       case 'conversation-chain-start':
-        setAiState('thinking-speaking');
+        stopCurrentAudioAndLipSync();
         audioTaskQueue.clearQueue();
+        setAiState('thinking-speaking');
         clearResponse();
         break;
       case 'conversation-chain-end':
@@ -96,7 +97,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
       default:
         console.warn('Unknown control command:', controlText);
     }
-  }, [setAiState, clearResponse, setForceNewMessage, startMic, stopMic]);
+  }, [clearResponse, setAiState, setForceNewMessage, startMic, stopCurrentAudioAndLipSync, stopMic]);
 
   const handleWebSocketMessage = useCallback((message: MessageEvent) => {
     console.log('Received message from server:', message);
@@ -115,13 +116,27 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
           setConfUid(message.conf_uid);
           console.log('confUid', message.conf_uid);
         }
-        setPendingModelInfo(message.model_info);
-        // setModelInfo(message.model_info);
-        // We don't know when the confRef in live2d-config-context will be updated, so we set a delay here for convenience
-        if (message.model_info && !message.model_info.url.startsWith("http")) {
-          const modelUrl = baseUrl + message.model_info.url;
-          // eslint-disable-next-line no-param-reassign
-          message.model_info.url = modelUrl;
+        {
+          let normalizedModelInfo = message.model_info;
+
+          // We don't know when the confRef in live2d-config-context will be updated,
+          // so normalize the model info payload before storing it.
+          if (normalizedModelInfo) {
+            const url = typeof normalizedModelInfo.url === 'string'
+              ? normalizedModelInfo.url
+              : '';
+
+            if (url && !url.startsWith("http")) {
+              normalizedModelInfo = {
+                ...normalizedModelInfo,
+                url: baseUrl + url,
+              };
+            } else if (!url) {
+              console.warn('Received model_info without a valid url:', normalizedModelInfo);
+            }
+          }
+
+          setPendingModelInfo(normalizedModelInfo);
         }
 
         setAiState('idle');
@@ -173,13 +188,15 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         if (aiState === 'interrupted' || aiState === 'listening') {
           console.log('Audio playback intercepted. Sentence:', message.display_text?.text);
         } else {
-          console.log("actions", message.actions);
+          console.log("actions received:", message.actions);
+          console.log("expressions in actions:", message.actions?.expressions);
           addAudioTask({
             audioBase64: message.audio || '',
             volumes: message.volumes || [],
             sliceLength: message.slice_length || 0,
             displayText: message.display_text || null,
             expressions: message.actions?.expressions || null,
+            expressionDecision: message.actions?.expression_decision || null,
             forwarded: message.forwarded || false,
           });
         }

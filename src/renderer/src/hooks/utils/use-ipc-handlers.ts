@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from "react";
-import { useInterrupt } from "@/components/canvas/live2d";
+import { useInterrupt } from "@/hooks/utils/use-interrupt";
 import { useMicToggle } from "./use-mic-toggle";
 import { useLive2DConfig } from "@/context/live2d-config-context";
 import { useSwitchCharacter } from "@/hooks/utils/use-switch-character";

@@ -1,10 +1,10 @@
 /* eslint-disable no-use-before-define */
 import {
-  createContext, useContext, useRef, useCallback, useEffect, useReducer, useMemo,
+  createContext, useContext, useRef, useCallback, useEffect, useReducer, useMemo, useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MicVAD } from '@ricky0123/vad-web';
-import { useInterrupt } from '@/components/canvas/live2d';
+import { useInterrupt } from '@/hooks/utils/use-interrupt';
 import { audioTaskQueue } from '@/utils/task-queue';
 import { useSendAudio } from '@/hooks/utils/use-send-audio';
 import { SubtitleContext } from './subtitle-context';
@@ -26,6 +26,14 @@ export interface VADSettings {
   /** Number of frames for speech redemption */
   redemptionFrames: number;
 }
+
+export interface AudioInputDevice {
+  deviceId: string;
+  label: string;
+}
+
+const DEFAULT_MIC_ID = '__default__';
+const MIC_PERMISSION_TIMEOUT_MS = 8000;
 
 /**
  * VAD context state interface
@@ -73,6 +81,21 @@ interface VADState {
 
   /** Set auto start microphone when conversation ends state */
   setAutoStartMicOnConvEnd: (value: boolean) => void;
+
+  /** Available microphone devices */
+  audioInputDevices: AudioInputDevice[];
+
+  /** Currently selected microphone device id */
+  selectedMicId: string;
+
+  /** Set microphone device id */
+  setSelectedMicId: (deviceId: string) => Promise<void>;
+
+  /** Refresh microphone devices */
+  refreshAudioInputDevices: () => Promise<void>;
+
+  /** Request microphone permission and refresh devices */
+  ensureMicrophonePermission: () => Promise<boolean>;
 }
 
 /**
@@ -89,6 +112,7 @@ const DEFAULT_VAD_STATE = {
   autoStopMic: false,
   autoStartMicOn: false,
   autoStartMicOnConvEnd: false,
+  selectedMicId: '',
 };
 
 /**
@@ -107,6 +131,7 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
   // Refs for VAD instance and state
   const vadRef = useRef<MicVAD | null>(null);
+  const currentStreamRef = useRef<MediaStream | null>(null);
   const previousTriggeredProbabilityRef = useRef(0);
   const previousAiStateRef = useRef<AiState>('idle');
 
@@ -121,6 +146,11 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
     'vadSettings',
     DEFAULT_VAD_SETTINGS,
   );
+  const [selectedMicId, setSelectedMicIdState] = useLocalStorage(
+    'selectedMicId',
+    DEFAULT_VAD_STATE.selectedMicId,
+  );
+  const [audioInputDevices, setAudioInputDevices] = useState<AudioInputDevice[]>([]);
   const [autoStartMicOn, setAutoStartMicOnState] = useLocalStorage(
     'autoStartMicOn',
     DEFAULT_VAD_STATE.autoStartMicOn,
@@ -149,6 +179,73 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
   const setAiStateRef = useRef(setAiState);
 
   const isProcessingRef = useRef(false);
+
+  const refreshAudioInputDevices = useCallback(async () => {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+
+    try {
+      const enumerateMicrophones = async () => {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        return devices
+          .filter((device) => device.kind === 'audioinput')
+          .map((device, index) => ({
+            deviceId: device.deviceId,
+            label: device.label || `Microphone ${index + 1}`,
+          }));
+      };
+
+      const microphones = await enumerateMicrophones();
+
+      const normalizedMicrophones = microphones.map((device, index) => ({
+        deviceId: device.deviceId || (index === 0 ? DEFAULT_MIC_ID : ''),
+        label: device.label || (index === 0 ? 'Default microphone' : `Microphone ${index + 1}`),
+      }));
+
+      const visibleMicrophones = normalizedMicrophones.filter((device) => Boolean(device.deviceId));
+      setAudioInputDevices(visibleMicrophones);
+
+      if (visibleMicrophones.length === 0) {
+        if (selectedMicId) {
+          setSelectedMicIdState('');
+        }
+        return;
+      }
+
+      if (!selectedMicId || !visibleMicrophones.some((device) => device.deviceId === selectedMicId)) {
+        setSelectedMicIdState(visibleMicrophones[0].deviceId);
+      }
+    } catch (error) {
+      console.error('Failed to enumerate audio input devices:', error);
+    }
+  }, [selectedMicId, setSelectedMicIdState]);
+
+  const ensureMicrophonePermission = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia) return false;
+
+    try {
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('Microphone permission request timed out'));
+        }, MIC_PERMISSION_TIMEOUT_MS);
+      });
+
+      const probeStream = await Promise.race([
+        navigator.mediaDevices.getUserMedia({ audio: true }),
+        timeoutPromise,
+      ]);
+      probeStream.getTracks().forEach((track) => track.stop());
+      await refreshAudioInputDevices();
+      return true;
+    } catch (error) {
+      console.warn('Microphone permission request failed:', error);
+      toaster.create({
+        title: `${t('error.failedStartVAD')}: ${error}`,
+        type: 'error',
+        duration: 3000,
+      });
+      return false;
+    }
+  }, [refreshAudioInputDevices, t]);
 
   // Update refs when dependencies change
   useEffect(() => {
@@ -182,6 +279,21 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     autoStartMicOnConvEndRef.current = autoStartMicOnConvEnd;
   }, []);
+
+  useEffect(() => {
+    void refreshAudioInputDevices();
+
+    if (!navigator.mediaDevices?.addEventListener) return undefined;
+
+    const handleDeviceChange = () => {
+      void refreshAudioInputDevices();
+    };
+
+    navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange);
+    return () => {
+      navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
+    };
+  }, [refreshAudioInputDevices]);
 
   /**
    * Update previous triggered probability and force re-render
@@ -275,9 +387,29 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
   /**
    * Initialize new VAD instance
    */
-  const initVAD = async () => {
+  const initVAD = useCallback(async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: selectedMicId && selectedMicId !== DEFAULT_MIC_ID
+        ? {
+          deviceId: { exact: selectedMicId },
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        }
+        : {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+    });
+
+    currentStreamRef.current = stream;
+
     const newVAD = await MicVAD.new({
       model: "v5",
+      stream,
       preSpeechPadFrames: 20,
       positiveSpeechThreshold: settings.positiveSpeechThreshold / 100,
       negativeSpeechThreshold: settings.negativeSpeechThreshold / 100,
@@ -293,7 +425,19 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
 
     vadRef.current = newVAD;
     newVAD.start();
-  };
+    await refreshAudioInputDevices();
+  }, [
+    handleFrameProcessed,
+    handleSpeechEnd,
+    handleSpeechRealStart,
+    handleSpeechStart,
+    handleVADMisfire,
+    refreshAudioInputDevices,
+    selectedMicId,
+    settings.negativeSpeechThreshold,
+    settings.positiveSpeechThreshold,
+    settings.redemptionFrames,
+  ]);
 
   /**
    * Start microphone and VAD processing
@@ -316,7 +460,7 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
         duration: 2000,
       });
     }
-  }, [t]);
+  }, [initVAD, t]);
 
   /**
    * Stop microphone and VAD processing
@@ -331,6 +475,10 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
       setPreviousTriggeredProbability(0);
     } else {
       console.log('VAD instance not found');
+    }
+    if (currentStreamRef.current) {
+      currentStreamRef.current.getTracks().forEach((track) => track.stop());
+      currentStreamRef.current = null;
     }
     setMicOn(false);
     isProcessingRef.current = false;
@@ -357,6 +505,19 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
     forceUpdate();
   }, []);
 
+  const setSelectedMicId = useCallback(async (deviceId: string) => {
+    if (deviceId === selectedMicId) return;
+
+    setSelectedMicIdState(deviceId);
+
+    if (micOn) {
+      stopMic();
+      setTimeout(() => {
+        void startMic();
+      }, 100);
+    }
+  }, [micOn, selectedMicId, setSelectedMicIdState, startMic, stopMic]);
+
   // Memoized context value
   const contextValue = useMemo(
     () => ({
@@ -374,9 +535,19 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
       setAutoStartMicOn,
       autoStartMicOnConvEnd: autoStartMicOnConvEndRef.current,
       setAutoStartMicOnConvEnd,
+      audioInputDevices,
+      selectedMicId,
+      setSelectedMicId,
+      refreshAudioInputDevices,
+      ensureMicrophonePermission,
     }),
     [
+      audioInputDevices,
+      ensureMicrophonePermission,
       micOn,
+      refreshAudioInputDevices,
+      selectedMicId,
+      setSelectedMicId,
       startMic,
       stopMic,
       settings,
@@ -404,4 +575,3 @@ export function useVAD() {
 
   return context;
 }
-

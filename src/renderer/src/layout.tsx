@@ -100,7 +100,7 @@ export const layoutStyles = {
     backgroundColor: 'gray.800',
     paddingX: '10px',
     zIndex: 1000,
-    css: { '-webkit-app-region': 'drag' },
+    css: { WebkitAppRegion: 'drag' },
   },
   macTitleBar: {
     position: 'fixed',
@@ -114,7 +114,7 @@ export const layoutStyles = {
     backgroundColor: 'gray.800',
     zIndex: 1000,
     css: {
-      '-webkit-app-region': 'drag',
+      WebkitAppRegion: 'drag',
       '-webkit-user-select': 'none',
     },
   },
@@ -131,14 +131,14 @@ export const layoutStyles = {
     size: 'sm',
     variant: 'ghost',
     color: 'whiteAlpha.800',
-    css: { '-webkit-app-region': 'no-drag' },
+    css: { WebkitAppRegion: 'no-drag' },
     _hover: { backgroundColor: 'whiteAlpha.200' },
   },
   closeButton: {
     size: 'sm',
     variant: 'ghost',
     color: 'whiteAlpha.800',
-    css: { '-webkit-app-region': 'no-drag' },
+    css: { WebkitAppRegion: 'no-drag' },
     _hover: { backgroundColor: 'red.500' },
   },
 } as const;

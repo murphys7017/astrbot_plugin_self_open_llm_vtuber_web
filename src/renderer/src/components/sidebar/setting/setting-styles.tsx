@@ -52,11 +52,13 @@ export const settingStyles = {
       list: {
         display: 'flex',
         justifyContent: 'flex-start',
+        flexWrap: 'wrap' as const,
         width: '100%',
         borderBottom: '1px solid',
         borderColor: 'whiteAlpha.200',
         mb: 4,
         pl: 0,
+        gap: 2,
       },
     },
     footer: {

@@ -35,6 +35,11 @@
       "scrollToResize": "启用滚轮缩放"
     },
     "asr": {
+      "microphone": "输入麦克风",
+      "selectMicrophone": "选择麦克风",
+      "requestMicrophonePermission": "请求麦克风权限",
+      "refreshMicrophones": "刷新麦克风列表",
+      "microphonePermissionHelp": "没有检测到可用麦克风时，请先授权麦克风访问，再刷新设备列表。",
       "autoStopMic": "AI开始说话时自动关闭麦克风",
       "autoStopMicDesc": "当AI开始说话时自动关闭麦克风，防止音频反馈",
       "autoStartMicOnConvEnd": "对话结束时自动开启麦克风",
