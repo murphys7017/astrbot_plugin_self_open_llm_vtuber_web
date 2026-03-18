@@ -86,6 +86,13 @@ class AudioManager {
   hasCurrentAudio(): boolean {
     return this.currentAudio !== null;
   }
+
+  /**
+   * Check whether the provided audio element is still the active one.
+   */
+  isCurrentAudio(audio: HTMLAudioElement): boolean {
+    return this.currentAudio === audio;
+  }
 }
 
 // Export singleton instance

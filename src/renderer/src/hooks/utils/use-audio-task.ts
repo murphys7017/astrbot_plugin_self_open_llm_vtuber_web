@@ -370,14 +370,18 @@ export const useAudioTask = () => {
 
           // Setup audio element
           const audio = new Audio(audioUrl);
+          audio.preload = 'auto';
           const lipSyncReadyPromise = preloadLipSyncAudio(model, audio, audioUrl)
+            .then(() => true)
             .catch((error) => {
               console.error('Failed to preload lip sync audio:', error);
+              return false;
             });
 
           let isFinished = false;
           let playbackStarted = false;
           let playbackVisualsCleared = false;
+          let playRequested = false;
 
           const clearPlaybackVisuals = () => {
             if (playbackVisualsCleared) {
@@ -389,7 +393,17 @@ export const useAudioTask = () => {
             resetModelExpression();
           };
 
+          const isActiveAudio = () => audioManager.isCurrentAudio(audio);
+
+          const detachAudioListeners = () => {
+            audio.removeEventListener('playing', handlePlaybackStart);
+            audio.removeEventListener('canplay', handleCanPlay);
+            audio.removeEventListener('ended', handleEnded);
+            audio.removeEventListener('error', handleError);
+          };
+
           const cleanup = () => {
+            detachAudioListeners();
             audioManager.clearCurrentAudio(audio);
             if (!isFinished) {
               isFinished = true;
@@ -400,8 +414,8 @@ export const useAudioTask = () => {
           // Register with global audio manager IMMEDIATELY after creating audio
           audioManager.setCurrentAudio(audio, model, cleanup);
 
-          const handlePlaybackStart = () => {
-            if (playbackStarted) {
+          function handlePlaybackStart() {
+            if (playbackStarted || !isActiveAudio()) {
               return;
             }
 
@@ -447,43 +461,80 @@ export const useAudioTask = () => {
             if (model._wavFileHandler) {
               model._wavFileHandler._syncAudioElement = audio;
             }
-          };
+          }
 
-          audio.addEventListener('playing', handlePlaybackStart);
+          const requestPlayback = () => {
+            if (playRequested) {
+              return;
+            }
+            playRequested = true;
 
-          audio.addEventListener('canplaythrough', async () => {
-            // Check for interruption before playback
-            if (stateRef.current.aiState === 'interrupted' || !audioManager.hasCurrentAudio()) {
+            if (stateRef.current.aiState === 'interrupted' || !isActiveAudio()) {
               console.warn('Audio playback cancelled due to interruption or audio was stopped');
               cleanup();
               return;
             }
 
-            await lipSyncReadyPromise;
+            audio.play().catch((err) => {
+              if (!isActiveAudio()) {
+                cleanup();
+                return;
+              }
 
-            if (stateRef.current.aiState === 'interrupted' || !audioManager.hasCurrentAudio()) {
+              // Playback may be requested before the browser has buffered enough data.
+              // Allow a later `canplay` event to retry without delaying the fast path.
+              if (audio.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+                playRequested = false;
+                return;
+              }
+
+              console.error("Audio play error:", err);
+              cleanup();
+            });
+
+            void lipSyncReadyPromise.then((loaded) => {
+              if (!loaded || !isActiveAudio()) {
+                return;
+              }
+
+              if (model._wavFileHandler) {
+                model._wavFileHandler._syncAudioElement = audio;
+              }
+            });
+          };
+
+          function handleCanPlay() {
+            requestPlayback();
+          }
+
+          function handleEnded() {
+            if (!isActiveAudio()) {
               cleanup();
               return;
             }
 
-            audio.play().catch((err) => {
-              console.error("Audio play error:", err);
-              cleanup();
-            });
-          });
-
-          audio.addEventListener('ended', () => {
             clearPlaybackVisuals();
             cleanup();
-          });
+          }
 
-          audio.addEventListener('error', (error) => {
+          function handleError(error: Event) {
+            if (!isActiveAudio()) {
+              cleanup();
+              return;
+            }
+
             console.error("Audio playback error:", error);
             clearPlaybackVisuals();
             cleanup();
-          });
+          }
+
+          audio.addEventListener('playing', handlePlaybackStart);
+          audio.addEventListener('canplay', handleCanPlay);
+          audio.addEventListener('ended', handleEnded);
+          audio.addEventListener('error', handleError);
 
           audio.load();
+          requestPlayback();
         });
       }
     } catch (error) {
