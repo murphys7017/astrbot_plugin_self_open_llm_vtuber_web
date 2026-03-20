@@ -40,6 +40,31 @@ export const useAudioTask = () => {
   const { modelInfo } = useLive2DConfig();
   const { setExpression, setExpressionWithRetry, resetExpression } = useLive2DExpression();
   const expressionOnlyHoldMs = 900;
+  const semanticExpressionFallbacks: Record<string, string[]> = {
+    neutral: ['Neutral'],
+    calm: ['Neutral'],
+    happy: ['Happy', 'Blush', 'Neutral'],
+    joy: ['Happy', 'Blush', 'Neutral'],
+    cheerful: ['Happy', 'Blush', 'Neutral'],
+    angry: ['Angry', 'Murderous', 'Neutral'],
+    mad: ['Angry', 'Murderous', 'Neutral'],
+    surprised: ['Surprised', 'Exclamation', 'Question'],
+    surprise: ['Surprised', 'Exclamation', 'Question'],
+    confused: ['Confused', 'Question', 'Neutral'],
+    curious: ['Question', 'Confused', 'Neutral'],
+    question: ['Question', 'Confused', 'Neutral'],
+    thinking: ['Loading', 'Question', 'Confused', 'Neutral'],
+    loading: ['Loading', 'Question', 'Neutral'],
+    embarrassed: ['Embarrassed', 'Blush', 'Neutral'],
+    blush: ['Blush', 'Embarrassed', 'Neutral'],
+    shy: ['Embarrassed', 'Blush', 'Neutral'],
+    tired: ['Tired', 'ExtremelyTired', 'Neutral'],
+    exhausted: ['ExtremelyTired', 'Tired', 'Neutral'],
+    sleepy: ['ExtremelyTired', 'Tired', 'Neutral'],
+    messy: ['Messy', 'Neutral'],
+    murderous: ['Murderous', 'Angry', 'Neutral'],
+    excited: ['Exclamation', 'Happy', 'Surprised'],
+  };
 
   // State refs to avoid stale closures
   const stateRef = useRef({
@@ -79,6 +104,116 @@ export const useAudioTask = () => {
     setSubtitleText('');
   }, [resetModelExpression, setSubtitleText]);
 
+  const normalizeExpressionValue = useCallback((value?: string | number | null) => {
+    if (typeof value === 'number') {
+      return String(value);
+    }
+
+    return value?.replace(/\\/g, '/').trim().toLowerCase() ?? '';
+  }, []);
+
+  const findMappedExpression = useCallback((key?: string): string | number | null => {
+    const emotionMap = modelInfo?.emotionMap ?? {};
+    const normalized = normalizeExpressionValue(key);
+    if (!normalized) {
+      return null;
+    }
+
+    const exactEntry = Object.entries(emotionMap).find(
+      ([mapKey]) => normalizeExpressionValue(mapKey) === normalized,
+    );
+
+    return exactEntry?.[1] ?? null;
+  }, [modelInfo?.emotionMap, normalizeExpressionValue]);
+
+  const findModelExpressionMatch = useCallback((
+    candidate: string | number | null | undefined,
+    lappAdapter: any,
+  ): string | number | null => {
+    if (candidate === null || candidate === undefined) {
+      return null;
+    }
+
+    const model = lappAdapter?.getModel?.();
+    const modelSetting = model?._modelSetting;
+    const expressionCount = modelSetting?.getExpressionCount?.() ?? lappAdapter?.getExpressionCount?.() ?? 0;
+
+    if (typeof candidate === 'number') {
+      return candidate >= 0 && candidate < expressionCount ? candidate : null;
+    }
+
+    const trimmedCandidate = candidate.trim();
+    if (!trimmedCandidate) {
+      return null;
+    }
+
+    if (/^\d+$/.test(trimmedCandidate)) {
+      const expressionIndex = Number(trimmedCandidate);
+      return expressionIndex >= 0 && expressionIndex < expressionCount ? expressionIndex : null;
+    }
+
+    const normalizedCandidate = normalizeExpressionValue(trimmedCandidate);
+    if (!normalizedCandidate || expressionCount <= 0) {
+      return null;
+    }
+
+    for (let i = 0; i < expressionCount; i += 1) {
+      const expressionName = modelSetting?.getExpressionName?.(i) ?? lappAdapter?.getExpressionName?.(i);
+      const expressionFile = modelSetting?.getExpressionFileName?.(i);
+
+      if (
+        typeof expressionName === 'string'
+        && normalizeExpressionValue(expressionName) === normalizedCandidate
+      ) {
+        return expressionName;
+      }
+
+      if (typeof expressionFile === 'string') {
+        const normalizedFile = normalizeExpressionValue(expressionFile);
+        const normalizedFileName = normalizedFile.split('/').pop() ?? normalizedFile;
+
+        if (
+          normalizedFile === normalizedCandidate
+          || normalizedFileName === normalizedCandidate
+        ) {
+          return expressionName ?? trimmedCandidate;
+        }
+      }
+    }
+
+    return null;
+  }, [normalizeExpressionValue]);
+
+  const findSemanticFallbackExpression = useCallback((
+    key: string | null | undefined,
+    lappAdapter: any,
+  ): string | number | null => {
+    const normalizedKey = normalizeExpressionValue(key);
+    if (!normalizedKey) {
+      return null;
+    }
+
+    const fallbackCandidates = semanticExpressionFallbacks[normalizedKey] ?? [];
+    for (const fallbackCandidate of fallbackCandidates) {
+      const mappedExpression = findMappedExpression(fallbackCandidate);
+      if (mappedExpression !== null) {
+        return mappedExpression;
+      }
+
+      const modelExpression = findModelExpressionMatch(fallbackCandidate, lappAdapter);
+      if (modelExpression !== null) {
+        return modelExpression;
+      }
+    }
+
+    return null;
+  }, [
+    findMappedExpression,
+    findModelExpressionMatch,
+    normalizeExpressionValue,
+    semanticExpressionFallbacks,
+  ]);
+
   const resolvePlaybackExpression = useCallback((
     expressions?: string[] | number[] | null,
     expressionDecision?: {
@@ -86,37 +221,87 @@ export const useAudioTask = () => {
       base_expression?: string
       reason?: string
     } | null,
+    lappAdapter?: any,
+    options?: {
+      preferMotion?: boolean
+    },
   ): string | number | null => {
-    const emotionMap = modelInfo?.emotionMap ?? {};
-
-    const normalizeKey = (value?: string) => value?.trim().toLowerCase() ?? '';
-
-    const findMappedExpression = (key?: string): string | number | null => {
-      const normalized = normalizeKey(key);
-      if (!normalized) {
-        return null;
-      }
-
-      const exactEntry = Object.entries(emotionMap).find(
-        ([mapKey]) => normalizeKey(mapKey) === normalized,
-      );
-
-      return exactEntry?.[1] ?? null;
-    };
-
     const baseExpression = expressionDecision?.base_expression?.trim();
+    const semanticExpression = expressionDecision?.semantic_expression?.trim();
+    const preferMotion = options?.preferMotion ?? false;
 
     const mappedBase = findMappedExpression(baseExpression);
     if (mappedBase !== null) {
       return mappedBase;
     }
 
-    if (baseExpression) {
-      return baseExpression;
+    const directBase = findModelExpressionMatch(baseExpression, lappAdapter);
+    if (directBase !== null) {
+      return directBase;
     }
 
-    return expressions?.[0] ?? null;
-  }, [modelInfo?.emotionMap]);
+    const mappedSemantic = findMappedExpression(semanticExpression);
+    if (mappedSemantic !== null) {
+      return mappedSemantic;
+    }
+
+    const directSemantic = findModelExpressionMatch(semanticExpression, lappAdapter);
+    if (directSemantic !== null) {
+      return directSemantic;
+    }
+
+    for (const expression of expressions ?? []) {
+      if (typeof expression === 'string') {
+        const mappedExpression = findMappedExpression(expression);
+        if (mappedExpression !== null) {
+          return mappedExpression;
+        }
+      }
+
+      const directExpression = findModelExpressionMatch(expression, lappAdapter);
+      if (directExpression !== null) {
+        return directExpression;
+      }
+    }
+
+    if (preferMotion) {
+      console.log(
+        '[AudioTask] Motion payload matched; skipping semantic-only expression fallback:',
+        {
+          baseExpression,
+          semanticExpression,
+          expressions,
+        },
+      );
+      return null;
+    }
+
+    const semanticFallback = findSemanticFallbackExpression(baseExpression, lappAdapter)
+      ?? findSemanticFallbackExpression(semanticExpression, lappAdapter);
+    if (semanticFallback !== null) {
+      console.warn(
+        '[AudioTask] Falling back semantic expression:',
+        baseExpression ?? semanticExpression,
+        '->',
+        semanticFallback,
+      );
+      return semanticFallback;
+    }
+
+    console.warn(
+      '[AudioTask] Failed to resolve playback expression from payload:',
+      {
+        baseExpression,
+        semanticExpression,
+        expressions,
+      },
+    );
+    return null;
+  }, [
+    findMappedExpression,
+    findModelExpressionMatch,
+    findSemanticFallbackExpression,
+  ]);
 
   const resolvePlaybackMotion = useCallback((model: any, motions?: string[] | null) => {
     const motionCandidate = motions?.[0]?.trim();
@@ -287,11 +472,16 @@ export const useAudioTask = () => {
       forwarded,
     } = options;
 
-    const expressionValue = resolvePlaybackExpression(expressions, expressionDecision);
     const lappAdapter = (window as any).getLAppAdapter?.();
     const resolvedStandaloneMotion = resolvePlaybackMotion(
       lappAdapter?.getModel?.(),
       motions,
+    );
+    const expressionValue = resolvePlaybackExpression(
+      expressions,
+      expressionDecision,
+      lappAdapter,
+      { preferMotion: Boolean(resolvedStandaloneMotion) },
     );
 
     // Update display text

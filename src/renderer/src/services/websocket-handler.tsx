@@ -37,31 +37,6 @@ const normalizeModelInfo = (modelInfo: ModelInfo | undefined, baseUrl: string) =
   };
 };
 
-const appendFullTextDelta = (
-  text: string,
-  fullResponse: string,
-  appendResponse: (delta: string) => void,
-  appendAIMessage: (delta: string) => void,
-) => {
-  if (text === fullResponse || fullResponse.startsWith(text)) {
-    return;
-  }
-
-  if (fullResponse && text.startsWith(fullResponse)) {
-    const delta = text.slice(fullResponse.length);
-    if (delta) {
-      appendResponse(delta);
-      appendAIMessage(delta);
-    }
-    return;
-  }
-
-  if (!fullResponse) {
-    appendResponse(text);
-    appendAIMessage(text);
-  }
-};
-
 const resolvePreferredHistoryUid = (
   histories: HistoryInfo[],
   currentHistoryUid: string | null,
@@ -87,10 +62,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
     clearResponse,
     setForceNewMessage,
     appendHumanMessage,
-    appendAIMessage,
-    appendResponse,
     appendOrUpdateToolCallMessage,
-    fullResponse,
     currentHistoryUid,
     setCurrentHistoryUid,
     setMessages,
@@ -98,8 +70,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
   } = useChatHistory();
   const { addAudioTask, stopCurrentAudioAndLipSync } = useAudioTask();
   const bgUrlContext = useBgUrl();
-  const { confUid, setConfName, setConfUid, setConfigFiles } = useConfig();
-  const [pendingModelInfo, setPendingModelInfo] = useState<ModelInfo | undefined>(undefined);
+  const { setConfName, setConfUid, setConfigFiles } = useConfig();
   const { startMic, stopMic, autoStartMicOnConvEnd } = useVAD();
   const autoStartMicOnConvEndRef = useRef(autoStartMicOnConvEnd);
   const { interrupt } = useInterrupt();
@@ -108,13 +79,6 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     autoStartMicOnConvEndRef.current = autoStartMicOnConvEnd;
   }, [autoStartMicOnConvEnd]);
-
-  useEffect(() => {
-    if (pendingModelInfo && confUid) {
-      setModelInfo(pendingModelInfo);
-      setPendingModelInfo(undefined);
-    }
-  }, [pendingModelInfo, setModelInfo, confUid]);
 
   const handleControlMessage = useCallback((controlText: string) => {
     switch (controlText) {
@@ -165,14 +129,17 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         if (message.conf_uid) {
           setConfUid(message.conf_uid);
         }
-        setPendingModelInfo(normalizeModelInfo(message.model_info, baseUrl));
+        {
+          const nextModelInfo = normalizeModelInfo(message.model_info, baseUrl);
+          console.log('[WebSocket] Applying model info:', nextModelInfo);
+          setModelInfo(nextModelInfo);
+        }
 
         setAiState('idle');
         break;
       case 'full-text':
         if (message.text) {
-          setSubtitleText(message.text);
-          appendFullTextDelta(message.text, fullResponse, appendResponse, appendAIMessage);
+          console.log('[WebSocket] Ignoring full-text UI/history update; using audio display_text as source of truth');
         }
         break;
       case 'config-files':
@@ -324,7 +291,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
       default:
         console.warn('Unknown message type:', message.type);
     }
-  }, [aiState, addAudioTask, appendAIMessage, appendHumanMessage, appendResponse, baseUrl, bgUrlContext, setAiState, setConfName, setConfUid, setConfigFiles, setCurrentHistoryUid, setHistoryList, setMessages, setSubtitleText, setBackendSynthComplete, fullResponse, handleControlMessage, appendOrUpdateToolCallMessage, interrupt, setBrowserViewData, t]);
+  }, [aiState, addAudioTask, appendHumanMessage, baseUrl, bgUrlContext, setAiState, setConfName, setConfUid, setConfigFiles, setCurrentHistoryUid, setHistoryList, setMessages, setSubtitleText, setBackendSynthComplete, handleControlMessage, appendOrUpdateToolCallMessage, interrupt, setBrowserViewData, t]);
 
   useEffect(() => {
     wsService.connect(wsUrl);

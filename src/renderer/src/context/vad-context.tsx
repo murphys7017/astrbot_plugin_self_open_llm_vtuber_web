@@ -132,6 +132,8 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
   // Refs for VAD instance and state
   const vadRef = useRef<MicVAD | null>(null);
   const currentStreamRef = useRef<MediaStream | null>(null);
+  const desiredMicOnRef = useRef(false);
+  const startRequestIdRef = useRef(0);
   const previousTriggeredProbabilityRef = useRef(0);
   const previousAiStateRef = useRef<AiState>('idle');
 
@@ -270,15 +272,15 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     autoStopMicRef.current = autoStopMic;
-  }, []);
+  }, [autoStopMic]);
 
   useEffect(() => {
     autoStartMicRef.current = autoStartMicOn;
-  }, []);
+  }, [autoStartMicOn]);
 
   useEffect(() => {
     autoStartMicOnConvEndRef.current = autoStartMicOnConvEnd;
-  }, []);
+  }, [autoStartMicOnConvEnd]);
 
   useEffect(() => {
     void refreshAudioInputDevices();
@@ -387,7 +389,7 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
   /**
    * Initialize new VAD instance
    */
-  const initVAD = useCallback(async () => {
+  const initVAD = useCallback(async (requestId: number) => {
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: selectedMicId && selectedMicId !== DEFAULT_MIC_ID
         ? {
@@ -404,6 +406,11 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
           autoGainControl: true,
         },
     });
+
+    if (!desiredMicOnRef.current || requestId !== startRequestIdRef.current) {
+      stream.getTracks().forEach((track) => track.stop());
+      return null;
+    }
 
     currentStreamRef.current = stream;
 
@@ -423,9 +430,20 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
       onVADMisfire: handleVADMisfire,
     });
 
+    if (!desiredMicOnRef.current || requestId !== startRequestIdRef.current) {
+      newVAD.pause();
+      newVAD.destroy();
+      stream.getTracks().forEach((track) => track.stop());
+      if (currentStreamRef.current === stream) {
+        currentStreamRef.current = null;
+      }
+      return null;
+    }
+
     vadRef.current = newVAD;
     newVAD.start();
     await refreshAudioInputDevices();
+    return newVAD;
   }, [
     handleFrameProcessed,
     handleSpeechEnd,
@@ -443,16 +461,32 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
    * Start microphone and VAD processing
    */
   const startMic = useCallback(async () => {
+    const requestId = startRequestIdRef.current + 1;
+    startRequestIdRef.current = requestId;
+    desiredMicOnRef.current = true;
+
     try {
       if (!vadRef.current) {
         console.log('Initializing VAD');
-        await initVAD();
+        const createdVAD = await initVAD(requestId);
+        if (!createdVAD) {
+          return;
+        }
       } else {
         console.log('Starting VAD');
+        if (!desiredMicOnRef.current || requestId !== startRequestIdRef.current) {
+          return;
+        }
         vadRef.current.start();
       }
+
+      if (!desiredMicOnRef.current || requestId !== startRequestIdRef.current) {
+        return;
+      }
+
       setMicOn(true);
     } catch (error) {
+      desiredMicOnRef.current = false;
       console.error('Failed to start VAD:', error);
       toaster.create({
         title: `${t('error.failedStartVAD')}: ${error}`,
@@ -467,6 +501,9 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
    */
   const stopMic = useCallback(() => {
     console.log('Stopping VAD');
+    desiredMicOnRef.current = false;
+    startRequestIdRef.current += 1;
+
     if (vadRef.current) {
       vadRef.current.pause();
       vadRef.current.destroy();
@@ -517,6 +554,26 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
       }, 100);
     }
   }, [micOn, selectedMicId, setSelectedMicIdState, startMic, stopMic]);
+
+  useEffect(() => {
+    desiredMicOnRef.current = micOn;
+  }, [micOn]);
+
+  useEffect(() => () => {
+    desiredMicOnRef.current = false;
+    startRequestIdRef.current += 1;
+
+    if (vadRef.current) {
+      vadRef.current.pause();
+      vadRef.current.destroy();
+      vadRef.current = null;
+    }
+
+    if (currentStreamRef.current) {
+      currentStreamRef.current.getTracks().forEach((track) => track.stop());
+      currentStreamRef.current = null;
+    }
+  }, []);
 
   // Memoized context value
   const contextValue = useMemo(
