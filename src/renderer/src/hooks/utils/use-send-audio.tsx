@@ -1,10 +1,9 @@
 import { useCallback } from "react";
 import { useWebSocket } from "@/context/websocket-context";
-import { useMediaCapture } from "@/hooks/utils/use-media-capture";
+import { markFrontendRequestStart } from '@/utils/timing-debug';
 
 export function useSendAudio() {
   const { sendMessage } = useWebSocket();
-  const { captureAllMedia } = useMediaCapture();
 
   const sendAudioPartition = useCallback(
     async (audio: Float32Array) => {
@@ -21,15 +20,17 @@ export function useSendAudio() {
         });
       }
 
-      // Send end signal after all chunks
-      const images = await captureAllMedia();
-      sendMessage({ type: "mic-audio-end", images });
+      // Voice input intentionally omits images to avoid repeatedly uploading
+      // the same captured media and to let STT start immediately.
+      markFrontendRequestStart('voice', {
+        imageCount: 0,
+      });
+      sendMessage({ type: "mic-audio-end" });
     },
-    [sendMessage, captureAllMedia],
+    [sendMessage],
   );
 
   return {
     sendAudioPartition,
   };
 }
-

@@ -153,6 +153,12 @@ export const useAudioTask = () => {
       forwarded,
     } = options;
 
+    console.log('[AudioTaskTiming] received_audio_url', {
+      at: performance.now(),
+      audioUrl,
+      displayText: displayText?.text ?? null,
+    });
+
     const lappAdapter = (window as any).getLAppAdapter?.();
     const resolvedStandaloneMotion = resolvePlaybackMotion(
       lappAdapter?.getModel?.(),

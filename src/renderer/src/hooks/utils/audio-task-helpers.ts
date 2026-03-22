@@ -473,6 +473,12 @@ export const runAudioPlaybackLifecycle = async ({
           return false;
         });
 
+      console.log('[AudioTaskTiming] loaded_audio_source', {
+        at: performance.now(),
+        audioUrl,
+        playbackUrl: sharedAudioSource.playbackUrl,
+      });
+
       let isFinished = false;
       let playbackStarted = false;
       let playbackVisualsCleared = false;
@@ -517,7 +523,18 @@ export const runAudioPlaybackLifecycle = async ({
 
         playbackStarted = true;
 
+        console.log('[AudioTaskTiming] playback_started', {
+          at: performance.now(),
+          audioUrl,
+          currentTime: audio.currentTime,
+        });
+
         if (displayText) {
+          console.log('[AudioTaskTiming] subtitle_shown', {
+            at: performance.now(),
+            audioUrl,
+            text: displayText.text,
+          });
           deps.updateSubtitle(displayText.text);
         }
 
@@ -605,6 +622,12 @@ export const runAudioPlaybackLifecycle = async ({
           cleanup();
           return;
         }
+
+        console.log('[AudioTaskTiming] playback_ended', {
+          at: performance.now(),
+          audioUrl,
+          currentTime: audio.currentTime,
+        });
 
         clearPlaybackVisuals();
         cleanup();

@@ -5,6 +5,7 @@ import { useInterrupt } from '@/hooks/utils/use-interrupt';
 import { useChatHistory } from '@/context/chat-history-context';
 import { useVAD } from '@/context/vad-context';
 import { useMediaCapture } from '@/hooks/utils/use-media-capture';
+import { markFrontendRequestStart } from '@/utils/timing-debug';
 
 export function useTextInput() {
   const [inputText, setInputText] = useState('');
@@ -29,6 +30,10 @@ export function useTextInput() {
     const images = await captureAllMedia();
 
     appendHumanMessage(inputText.trim());
+    markFrontendRequestStart('text', {
+      textLength: inputText.trim().length,
+      imageCount: Array.isArray(images) ? images.length : 0,
+    });
     wsContext.sendMessage({
       type: 'text-input',
       text: inputText.trim(),

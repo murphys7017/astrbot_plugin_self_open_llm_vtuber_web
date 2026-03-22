@@ -354,10 +354,20 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
     }
 
     setPreviousTriggeredProbability(0);
-    sendAudioPartitionRef.current(audio);
-    isProcessingRef.current = false;
-    setAiStateRef.current("thinking-speaking");
-  }, []);
+    void sendAudioPartitionRef.current(audio)
+      .catch((error) => {
+        console.error('Failed to send captured audio to backend:', error);
+        toaster.create({
+          title: `${t('error.failedStartVAD')}: ${error}`,
+          type: 'error',
+          duration: 2000,
+        });
+      })
+      .finally(() => {
+        isProcessingRef.current = false;
+        setAiStateRef.current("thinking-speaking");
+      });
+  }, [t]);
 
   /**
    * Handle VAD misfire event

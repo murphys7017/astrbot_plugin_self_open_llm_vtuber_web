@@ -2,6 +2,10 @@ import { toaster } from '@/components/ui/toaster';
 import { HistoryInfo } from '@/context/websocket-context';
 import { MessageEvent } from '@/services/websocket-service';
 import { audioTaskQueue } from '@/utils/task-queue';
+import {
+  markFrontendFirstResponse,
+  markFrontendTranscriptionReceived,
+} from '@/utils/timing-debug';
 
 export const normalizeModelInfo = (modelInfo: any, baseUrl: string) => {
   if (!modelInfo) {
@@ -76,6 +80,12 @@ export const createControlMessageHandler = ({
           });
           resolve();
         }));
+        break;
+      case 'interrupt':
+        stopCurrentAudioAndLipSync();
+        audioTaskQueue.clearQueue();
+        setAiState('interrupted');
+        clearResponse();
         break;
       default:
         console.warn('Unknown control command:', controlText);
@@ -182,6 +192,9 @@ export const createWebSocketMessageHandler = ({
         }
         break;
       case 'audio':
+        markFrontendFirstResponse('audio', {
+          hasAudioUrl: Boolean(message.audio_url),
+        });
         if (aiState !== 'interrupted' && aiState !== 'listening') {
           addAudioTask({
             audioUrl: message.audio_url || '',
@@ -252,10 +265,12 @@ export const createWebSocketMessageHandler = ({
         break;
       case 'user-input-transcription':
         if (message.text) {
+          markFrontendTranscriptionReceived(message.text);
           appendHumanMessage(message.text);
         }
         break;
       case 'error':
+        markFrontendFirstResponse('error');
         toaster.create({
           title: message.message,
           type: 'error',
@@ -269,6 +284,7 @@ export const createWebSocketMessageHandler = ({
       case 'group-update':
         break;
       case 'conversation-chain-end':
+        markFrontendFirstResponse('conversation-chain-end');
         if (!audioTaskQueue.hasTask()) {
           setAiState((currentState: any) => {
             if (currentState === 'thinking-speaking') {
@@ -279,6 +295,7 @@ export const createWebSocketMessageHandler = ({
         }
         break;
       case 'force-new-message':
+        markFrontendFirstResponse('force-new-message');
         setForceNewMessage(true);
         break;
       case 'interrupt-signal':
