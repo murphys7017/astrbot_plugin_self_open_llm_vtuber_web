@@ -64,7 +64,98 @@ export class WindowManager {
 
   private shouldRestorePetFocusAfterDevTools = false;
 
+  // Store IPC handler references for cleanup
+  private ipcHandlers: Map<string, (...args: any[]) => void> = new Map();
+
   constructor() {
+    this.setupIpcHandlers();
+  }
+
+  /**
+   * Setup and register all IPC handlers with proper cleanup references
+   */
+  private setupIpcHandlers(): void {
+    const handlers: { [key: string]: (...args: any[]) => void } = {
+      'renderer-ready-for-mode-change': (_event, newMode) => {
+        if (newMode === 'pet') {
+          setTimeout(() => {
+            this.continueSetWindowModePet();
+          }, 500);
+        } else {
+          setTimeout(() => {
+            this.continueSetWindowModeWindow();
+          }, 500);
+        }
+      },
+
+      'mode-change-rendered': () => {
+        this.window?.setOpacity(1);
+      },
+
+      'window-unfullscreen': () => {
+        const window = this.getWindow();
+        if (window && window.isFullScreen()) {
+          window.setFullScreen(false);
+        }
+      },
+
+      'toggle-force-ignore-mouse': () => {
+        this.toggleForceIgnoreMouse();
+      },
+
+      'pet-input-focus-changed': (_event, focused: boolean) => {
+        this.setPetInputFocused(focused);
+      },
+
+      'pet-window-drag-start': (_event, screenX: number, screenY: number) => {
+        this.startPetWindowDrag(screenX, screenY);
+      },
+
+      'pet-window-drag-move': (_event, screenX: number, screenY: number) => {
+        this.updatePetWindowDrag(screenX, screenY);
+      },
+
+      'pet-window-drag-end': () => {
+        this.endPetWindowDrag();
+      },
+
+      'pet-overlay-action-send-text': (_event, payload: { text?: string; timestamp?: number } | string) => {
+        this.window?.webContents.send('pet-overlay-send-text', payload);
+      },
+
+      'pet-overlay-action-mic-toggle': () => {
+        this.window?.webContents.send('pet-overlay-mic-toggle');
+      },
+
+      'pet-overlay-action-interrupt': () => {
+        this.window?.webContents.send('pet-overlay-interrupt');
+      },
+
+      'pet-overlay-state-update': (_event, state) => {
+        this.petOverlayWindow?.webContents.send('pet-overlay-state-update', state);
+      },
+
+      'pet-overlay-preferred-height': (_event, preferredHeight: number) => {
+        this.updatePetOverlayHeight(preferredHeight);
+      },
+    };
+
+    // Register all handlers and store references
+    Object.entries(handlers).forEach(([channel, handler]) => {
+      this.ipcHandlers.set(channel, handler);
+      ipcMain.on(channel, handler);
+    });
+  }
+
+  /**
+   * Remove all registered IPC handlers to prevent memory leaks
+   */
+  private cleanupIpcHandlers(): void {
+    this.ipcHandlers.forEach((handler, channel) => {
+      ipcMain.removeListener(channel, handler);
+    });
+    this.ipcHandlers.clear();
+  }
     ipcMain.on('renderer-ready-for-mode-change', (_event, newMode) => {
       if (newMode === 'pet') {
         setTimeout(() => {
@@ -167,6 +258,7 @@ export class WindowManager {
 
     this.window.on('closed', () => {
       this.destroyPetOverlayWindow();
+      this.cleanupIpcHandlers();
       this.window = null;
     });
 

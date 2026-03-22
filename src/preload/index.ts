@@ -32,7 +32,9 @@ const api = {
     ipcRenderer.send('show-context-menu');
   },
   onModeChanged: (callback: (mode: string) => void) => {
-    ipcRenderer.on('mode-changed', (_, mode) => callback(mode));
+    const handler = (_event: any, mode: string) => callback(mode);
+    ipcRenderer.on('mode-changed', handler);
+    return () => ipcRenderer.removeListener('mode-changed', handler);
   },
   onMicToggle: (callback: () => void) => {
     const handler = (_event: any) => callback();

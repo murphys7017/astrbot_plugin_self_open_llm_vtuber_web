@@ -6,6 +6,7 @@ class AudioManager {
   private currentAudio: HTMLAudioElement | null = null;
   private currentModel: any | null = null;
   private currentStopHandler: (() => void) | null = null;
+  private audioPool: Set<HTMLAudioElement> = new Set();
 
   /**
    * Set the current playing audio
@@ -24,10 +25,16 @@ class AudioManager {
       console.log('[AudioManager] Stopping current audio and lip sync');
       const audio = this.currentAudio;
       
-      // Stop audio playback
-      audio.pause();
-      audio.src = '';
-      audio.load();
+      // Stop audio playback with proper cleanup
+      try {
+        audio.pause();
+        audio.src = '';
+        audio.load();
+        // Remove all event listeners to prevent memory leaks
+        audio.replaceWith(audio.cloneNode(true));
+      } catch (e) {
+        console.warn('[AudioManager] Error cleaning up audio playback:', e);
+      }
 
       // Stop Live2D lip sync
       const model = this.currentModel;
@@ -71,6 +78,17 @@ class AudioManager {
    */
   clearCurrentAudio(audio: HTMLAudioElement) {
     if (this.currentAudio === audio) {
+      // Proper cleanup of audio element
+      try {
+        audio.pause();
+        audio.src = '';
+        audio.load();
+        // Remove all event listeners to prevent memory leaks
+        audio.replaceWith(audio.cloneNode(true));
+      } catch (e) {
+        console.warn('[AudioManager] Error cleaning up audio element:', e);
+      }
+
       if (this.currentModel?._wavFileHandler) {
         this.currentModel._wavFileHandler._syncAudioElement = null;
       }
@@ -93,7 +111,33 @@ class AudioManager {
   isCurrentAudio(audio: HTMLAudioElement): boolean {
     return this.currentAudio === audio;
   }
+
+  /**
+   * Cleanup abandoned audio elements to prevent memory leaks
+   */
+  cleanupOrphanedAudioElements() {
+    for (const audio of this.audioPool) {
+      if (this.currentAudio !== audio) {
+        try {
+          audio.pause();
+          audio.src = '';
+          audio.load();
+          audio.replaceWith(audio.cloneNode(true));
+        } catch (e) {
+          console.warn('[AudioManager] Error cleaning orphaned audio:', e);
+        }
+      }
+    }
+    this.audioPool.clear();
+  }
 }
 
 // Export singleton instance
 export const audioManager = new AudioManager();
+
+// Cleanup on window unload
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => {
+    audioManager.cleanupOrphanedAudioElements();
+  });
+}
