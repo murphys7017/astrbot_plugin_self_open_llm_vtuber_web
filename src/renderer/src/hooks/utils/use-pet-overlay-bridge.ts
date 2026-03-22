@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useCallback } from 'react';
+import { useEffect, useMemo, useCallback, useRef } from 'react';
 import { useWebSocket } from '@/context/websocket-context';
 import { useAiState } from '@/context/ai-state-context';
 import { useInterrupt } from '@/hooks/utils/use-interrupt';
@@ -27,6 +27,16 @@ export function usePetOverlayBridge() {
   } = useVAD();
   const { captureAllMedia } = useMediaCapture();
 
+  // 【P1 修复】使用 useRef 隔离高频状态，稳定三个事件处理器
+  const stateRef = useRef({
+    aiState,
+    micOn,
+  });
+
+  useEffect(() => {
+    stateRef.current = { aiState, micOn };
+  }, [aiState, micOn]);
+
   const lastAIMessage = useMemo(
     () => messages
       .filter((msg) => msg.role === 'ai')
@@ -40,7 +50,8 @@ export function usePetOverlayBridge() {
     const text = rawText.trim();
     if (!text) return;
 
-    if (aiState === 'thinking-speaking') {
+    // 从 ref 获取最新的 aiState，而不在依赖中包含
+    if (stateRef.current.aiState === 'thinking-speaking') {
       interrupt();
     }
 
@@ -59,7 +70,7 @@ export function usePetOverlayBridge() {
     if (autoStopMic) {
       stopMic();
     }
-  }, [aiState, interrupt, captureAllMedia, appendHumanMessage, sendMessage, autoStopMic, stopMic]);
+  }, [interrupt, captureAllMedia, appendHumanMessage, sendMessage, autoStopMic, stopMic]);
 
   const handleOverlayInterrupt = useCallback(() => {
     interrupt();
@@ -69,9 +80,10 @@ export function usePetOverlayBridge() {
   }, [interrupt, autoStartMicOn, startMic]);
 
   const handleOverlayMicToggle = useCallback(async () => {
-    if (micOn) {
+    // 从 ref 获取最新的 micOn 和 aiState
+    if (stateRef.current.micOn) {
       stopMic();
-      if (aiState === 'listening') {
+      if (stateRef.current.aiState === 'listening') {
         setAiState('idle');
       }
       return;
@@ -82,7 +94,7 @@ export function usePetOverlayBridge() {
     } catch (error) {
       console.error('[PetOverlay] Failed to start microphone:', error);
     }
-  }, [aiState, micOn, setAiState, startMic, stopMic]);
+  }, [setAiState, startMic, stopMic]);
 
   useEffect(() => {
     if (!isElectron || isOverlay) return;

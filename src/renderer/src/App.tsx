@@ -1,7 +1,7 @@
 /* eslint-disable no-shadow */
 // import { StrictMode } from 'react';
 import { Box, Flex, ChakraProvider, defaultSystem } from "@chakra-ui/react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, memo } from "react";
 // import Canvas from './components/canvas/canvas'; // Likely unused now
 import Sidebar from "./components/sidebar/sidebar";
 import Footer from "./components/footer/footer";
@@ -38,6 +38,24 @@ const isPetOverlayRenderer = (): boolean => {
     return false;
   }
 };
+
+// 【P1 修复】低频提供者组件 - 用 React.memo 包装防止不必要重新渲染
+// 这些提供者的状态变化不频繁，不应该因为高频提供者的变化而重新渲染
+const LowFrequencyProviders = memo(function LowFrequencyProviders({ children }: { children: React.ReactNode }) {
+  return (
+    <CameraProvider>
+      <ScreenCaptureProvider>
+        <CharacterConfigProvider>
+          <BgUrlProvider>
+            <BrowserProvider>
+              {children}
+            </BrowserProvider>
+          </BgUrlProvider>
+        </CharacterConfigProvider>
+      </ScreenCaptureProvider>
+    </CameraProvider>
+  );
+});
 
 function AppContent(): JSX.Element {
   const [showSidebar, setShowSidebar] = useState(true);
@@ -215,33 +233,27 @@ function App(): JSX.Element {
 function AppWithGlobalStyles(): JSX.Element {
   return (
     <>
-      <CameraProvider>
-        <ScreenCaptureProvider>
-          <CharacterConfigProvider>
-            <ChatHistoryProvider>
-              <AiStateProvider>
-                <ProactiveSpeakProvider>
-                  <Live2DConfigProvider>
-                    <SubtitleProvider>
-                      <VADProvider>
-                        <BgUrlProvider>
-                          <BrowserProvider>
-                            <WebSocketHandler>
-                              <PetOverlayBridge />
-                              <Toaster />
-                              <AppContent />
-                            </WebSocketHandler>
-                          </BrowserProvider>
-                        </BgUrlProvider>
-                      </VADProvider>
-                    </SubtitleProvider>
-                  </Live2DConfigProvider>
-                </ProactiveSpeakProvider>
-              </AiStateProvider>
-            </ChatHistoryProvider>
-          </CharacterConfigProvider>
-        </ScreenCaptureProvider>
-      </CameraProvider>
+      {/* 【P1 修复】低频提供者在外层（用 memo 保护） */}
+      <LowFrequencyProviders>
+        {/* 【P1 修复】高频提供者在内层（使用 useMemo 进一步优化） */}
+        <ChatHistoryProvider>
+          <AiStateProvider>
+            <ProactiveSpeakProvider>
+              <Live2DConfigProvider>
+                <SubtitleProvider>
+                  <VADProvider>
+                    <WebSocketHandler>
+                      <PetOverlayBridge />
+                      <Toaster />
+                      <AppContent />
+                    </WebSocketHandler>
+                  </VADProvider>
+                </SubtitleProvider>
+              </Live2DConfigProvider>
+            </ProactiveSpeakProvider>
+          </AiStateProvider>
+        </ChatHistoryProvider>
+      </LowFrequencyProviders>
     </>
   );
 }

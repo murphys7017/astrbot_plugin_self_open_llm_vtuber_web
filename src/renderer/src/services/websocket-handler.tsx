@@ -49,26 +49,13 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
   const { interrupt } = useInterrupt();
   const { setBrowserViewData } = useBrowser();
 
-  useEffect(() => {
-    autoStartMicOnConvEndRef.current = autoStartMicOnConvEnd;
-  }, [autoStartMicOnConvEnd]);
-
-  const handleControlMessage = useCallback(createControlMessageHandler({
-    startMic,
-    stopMic,
-    stopCurrentAudioAndLipSync,
-    setAiState,
-    clearResponse,
-    autoStartMicOnConvEndRef,
-  }), [clearResponse, setAiState, startMic, stopCurrentAudioAndLipSync, stopMic]);
-
-  const handleWebSocketMessage = useCallback(createWebSocketMessageHandler({
+  // 【P0 修复】分离高频动态状态到 ref，避免重新创建 handleWebSocketMessage
+  const dynamicStateRef = useRef({
     aiState,
     baseUrl,
     currentHistoryUid,
     t,
     interrupt,
-    handleControlMessage,
     addAudioTask,
     appendHumanMessage,
     appendOrUpdateToolCallMessage,
@@ -84,22 +71,80 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
     setSubtitleText,
     setForceNewMessage,
     setBrowserViewData,
-    setBackgroundFiles: bgUrlContext?.setBackgroundFiles,
-    sendMessage: wsService.sendMessage.bind(wsService),
-  }), [aiState, addAudioTask, appendHumanMessage, appendOrUpdateToolCallMessage, baseUrl, bgUrlContext, currentHistoryUid, handleControlMessage, interrupt, setAiState, setBackendSynthComplete, setBrowserViewData, setConfName, setConfUid, setConfigFiles, setCurrentHistoryUid, setForceNewMessage, setHistoryList, setMessages, setModelInfo, setSubtitleText, t]);
+    bgUrlContextSetBgFiles: bgUrlContext?.setBackgroundFiles,
+  });
+
+  // 同步动态状态到 ref（但不触发 useCallback 重建）
+  useEffect(() => {
+    dynamicStateRef.current = {
+      aiState,
+      baseUrl,
+      currentHistoryUid,
+      t,
+      interrupt,
+      addAudioTask,
+      appendHumanMessage,
+      appendOrUpdateToolCallMessage,
+      setAiState,
+      setBackendSynthComplete,
+      setModelInfo,
+      setConfName,
+      setConfUid,
+      setConfigFiles,
+      setCurrentHistoryUid,
+      setHistoryList,
+      setMessages,
+      setSubtitleText,
+      setForceNewMessage,
+      setBrowserViewData,
+      bgUrlContextSetBgFiles: bgUrlContext?.setBackgroundFiles,
+    };
+  }, [
+    aiState, baseUrl, currentHistoryUid, t, interrupt, addAudioTask,
+    appendHumanMessage, appendOrUpdateToolCallMessage, setAiState,
+    setBackendSynthComplete, setModelInfo, setConfName, setConfUid,
+    setConfigFiles, setCurrentHistoryUid, setHistoryList, setMessages,
+    setSubtitleText, setForceNewMessage, setBrowserViewData, bgUrlContext,
+  ]);
+
+  useEffect(() => {
+    autoStartMicOnConvEndRef.current = autoStartMicOnConvEnd;
+  }, [autoStartMicOnConvEnd]);
+
+  const handleControlMessage = useCallback(createControlMessageHandler({
+    startMic,
+    stopMic,
+    stopCurrentAudioAndLipSync,
+    setAiState,
+    clearResponse,
+    autoStartMicOnConvEndRef,
+  }), [clearResponse, setAiState, startMic, stopCurrentAudioAndLipSync, stopMic]);
+
+  // 【P0 修复】创建稳定的 handleWebSocketMessage：仅依赖于真正稳定的参数
+  const handleWebSocketMessage = useCallback((messageData: any) => {
+    const state = dynamicStateRef.current;
+    // 使用闭包中的 createWebSocketMessageHandler，但通过 ref 访问最新状态
+    return createWebSocketMessageHandler(state)(messageData);
+  }, []); // 不依赖任何外部值！
 
   useEffect(() => {
     wsService.connect(wsUrl);
   }, [wsUrl]);
 
+  // 【P0 修复】分离订阅以消除泄漏
   useEffect(() => {
     const stateSubscription = wsService.onStateChange(setWsState);
-    const messageSubscription = wsService.onMessage(handleWebSocketMessage);
     return () => {
       stateSubscription.unsubscribe();
+    };
+  }, [wsUrl]);
+
+  useEffect(() => {
+    const messageSubscription = wsService.onMessage(handleWebSocketMessage);
+    return () => {
       messageSubscription.unsubscribe();
     };
-  }, [wsUrl, handleWebSocketMessage]);
+  }, [handleWebSocketMessage]);
 
   const webSocketContextValue = useMemo(() => ({
     sendMessage: wsService.sendMessage.bind(wsService),
