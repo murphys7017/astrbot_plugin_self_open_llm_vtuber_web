@@ -381,7 +381,9 @@ export class LAppModel extends CubismUserModel {
 
       // Fallback if no LipSync IDs are defined in the model setting
       if (this._lipSyncIds.getSize() === 0) {
-        console.warn('[Fallback] No LipSync IDs defined in model setting. Attempting fallback to "ParamMouthOpenY".');
+        if (LAppDefine.DebugLogEnable) {
+          console.info('[Fallback] No LipSync IDs defined in model setting. Attempting fallback to "ParamMouthOpenY".');
+        }
         
         const idManager = CubismFramework.getIdManager();
         if (idManager) {
@@ -390,12 +392,14 @@ export class LAppModel extends CubismUserModel {
           // Check if the model actually has this parameter before adding it
           if (this._model && fallbackId && this._model.getParameterIndex(fallbackId) !== -1) {
             this._lipSyncIds.pushBack(fallbackId);
-            console.log('[Fallback] Successfully added "ParamMouthOpenY" as LipSync ID.');
-          } else {
-            console.warn('[Fallback] Fallback ID "ParamMouthOpenY" not found in the current model or model not loaded.');
+            if (LAppDefine.DebugLogEnable) {
+              console.info('[Fallback] Successfully added "ParamMouthOpenY" as LipSync ID.');
+            }
+          } else if (LAppDefine.DebugLogEnable) {
+            console.info('[Fallback] Fallback ID "ParamMouthOpenY" not found in the current model or model not loaded.');
           }
-        } else {
-          console.warn('[Fallback] Could not access IdManager. LipSync fallback unavailable.');
+        } else if (LAppDefine.DebugLogEnable) {
+          console.info('[Fallback] Could not access IdManager. LipSync fallback unavailable.');
         }
       }
 

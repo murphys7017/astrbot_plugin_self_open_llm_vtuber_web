@@ -2,7 +2,7 @@ import { useVAD } from '@/context/vad-context';
 import { useAiState } from '@/context/ai-state-context';
 
 export function useMicToggle() {
-  const { startMic, stopMic, micOn, ensureMicrophonePermission } = useVAD();
+  const { startMic, stopMic, micOn } = useVAD();
   const { aiState, setAiState } = useAiState();
 
   const handleMicToggle = async (): Promise<void> => {
@@ -12,8 +12,6 @@ export function useMicToggle() {
         setAiState('idle');
       }
     } else {
-      const granted = await ensureMicrophonePermission();
-      if (!granted) return;
       await startMic();
     }
   };

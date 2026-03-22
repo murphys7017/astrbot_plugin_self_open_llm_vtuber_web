@@ -6,7 +6,6 @@ import { useChatHistory } from '@/context/chat-history-context';
 import { useVAD } from '@/context/vad-context';
 import { useMediaCapture } from '@/hooks/utils/use-media-capture';
 import { markFrontendRequestStart } from '@/utils/timing-debug';
-import { useMicToggle } from '@/hooks/utils/use-mic-toggle';
 
 const isPetOverlayWindow = (): boolean => {
   try {
@@ -20,12 +19,13 @@ export function usePetOverlayBridge() {
   const isElectron = window.api !== undefined;
   const isOverlay = isPetOverlayWindow();
   const { sendMessage } = useWebSocket();
-  const { aiState } = useAiState();
+  const { aiState, setAiState } = useAiState();
   const { interrupt } = useInterrupt();
   const { messages, appendHumanMessage } = useChatHistory();
-  const { startMic, stopMic, autoStartMicOn, autoStopMic } = useVAD();
+  const {
+    startMic, stopMic, autoStartMicOn, autoStopMic, micOn,
+  } = useVAD();
   const { captureAllMedia } = useMediaCapture();
-  const { handleMicToggle, micOn } = useMicToggle();
 
   const lastAIMessage = useMemo(
     () => messages
@@ -67,6 +67,22 @@ export function usePetOverlayBridge() {
     }
   }, [interrupt, autoStartMicOn, startMic]);
 
+  const handleOverlayMicToggle = useCallback(async () => {
+    if (micOn) {
+      stopMic();
+      if (aiState === 'listening') {
+        setAiState('idle');
+      }
+      return;
+    }
+
+    try {
+      await startMic();
+    } catch (error) {
+      console.error('[PetOverlay] Failed to start microphone:', error);
+    }
+  }, [aiState, micOn, setAiState, startMic, stopMic]);
+
   useEffect(() => {
     if (!isElectron || isOverlay) return;
 
@@ -77,7 +93,7 @@ export function usePetOverlayBridge() {
     if (typeof offSendText === 'function') cleanups.push(offSendText);
 
     const offMicToggle = window.api?.onPetOverlayMicToggle?.(() => {
-      void handleMicToggle();
+      void handleOverlayMicToggle();
     });
     if (typeof offMicToggle === 'function') cleanups.push(offMicToggle);
 
@@ -89,7 +105,7 @@ export function usePetOverlayBridge() {
     return () => {
       cleanups.forEach((cleanup) => cleanup());
     };
-  }, [isElectron, isOverlay, handleOverlaySendText, handleMicToggle, handleOverlayInterrupt]);
+  }, [isElectron, isOverlay, handleOverlayMicToggle, handleOverlaySendText, handleOverlayInterrupt]);
 
   useEffect(() => {
     if (!isElectron || isOverlay) return;

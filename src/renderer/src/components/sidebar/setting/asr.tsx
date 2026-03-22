@@ -37,12 +37,22 @@ function ASR({ onSave, onCancel }: ASRProps): JSX.Element {
   const [requestingMicPermission, setRequestingMicPermission] = useState(false);
 
   const withUiTimeout = async (task: () => Promise<void | boolean>) => {
-    await Promise.race([
-      task(),
-      new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Microphone request timed out in UI')), UI_TIMEOUT_MS);
-      }),
-    ]);
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    try {
+      await Promise.race([
+        task(),
+        new Promise((_, reject) => {
+          timeoutId = setTimeout(() => {
+            reject(new Error('Microphone request timed out in UI'));
+          }, UI_TIMEOUT_MS);
+        }),
+      ]);
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    }
   };
 
   const handleRequestMicrophoneAccess = async () => {
@@ -52,6 +62,8 @@ function ASR({ onSave, onCancel }: ASRProps): JSX.Element {
         await ensureMicrophonePermission();
         await refreshAudioInputDevices();
       });
+    } catch (error) {
+      console.warn('[ASR] Failed to request microphone access in UI:', error);
     } finally {
       setRequestingMicPermission(false);
     }
@@ -63,6 +75,8 @@ function ASR({ onSave, onCancel }: ASRProps): JSX.Element {
       await withUiTimeout(async () => {
         await refreshAudioInputDevices();
       });
+    } catch (error) {
+      console.warn('[ASR] Failed to refresh microphones in UI:', error);
     } finally {
       setRequestingMicPermission(false);
     }

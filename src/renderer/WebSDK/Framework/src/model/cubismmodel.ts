@@ -5,7 +5,7 @@
  * that can be found at https://www.live2d.com/eula/live2d-open-software-license-agreement_en.html.
  */
 
-import { CubismIdHandle } from '../id/cubismid';
+import { CubismId, CubismIdHandle } from '../id/cubismid';
 import { CubismFramework } from '../live2dcubismframework';
 import {
   CubismBlendMode,
@@ -72,6 +72,18 @@ export class DrawableCullingData {
  * Mocデータから生成されるモデルのクラス。
  */
 export class CubismModel {
+  private resolveIdHandle(id: string): CubismIdHandle {
+    const cached = this._idHandleCache.get(id);
+    if (cached) {
+      return cached;
+    }
+
+    const idManager = CubismFramework.getIdManager();
+    const resolved = idManager ? idManager.getId(id) : CubismId.createIdInternal(id);
+    this._idHandleCache.set(id, resolved);
+    return resolved;
+  }
+
   /**
    * モデルのパラメータの更新
    */
@@ -689,7 +701,7 @@ export class CubismModel {
    */
   public getPartId(partIndex: number): CubismIdHandle {
     const partId = this._model.parts.ids[partIndex];
-    return CubismFramework.getIdManager().getId(partId);
+    return this.resolveIdHandle(partId);
   }
 
   /**
@@ -853,9 +865,7 @@ export class CubismModel {
    * @returns パラメータID
    */
   public getParameterId(parameterIndex: number): CubismIdHandle {
-    return CubismFramework.getIdManager().getId(
-      this._model.parameters.ids[parameterIndex]
-    );
+    return this.resolveIdHandle(this._model.parameters.ids[parameterIndex]);
   }
 
   /**
@@ -1048,7 +1058,7 @@ export class CubismModel {
    */
   public getDrawableId(drawableIndex: number): CubismIdHandle {
     const parameterIds: string[] = this._model.drawables.ids;
-    return CubismFramework.getIdManager().getId(parameterIds[drawableIndex]);
+    return this.resolveIdHandle(parameterIds[drawableIndex]);
   }
 
   /**
@@ -1399,9 +1409,7 @@ export class CubismModel {
 
       this._parameterIds.prepareCapacity(parameterCount);
       for (let i = 0; i < parameterCount; ++i) {
-        this._parameterIds.pushBack(
-          CubismFramework.getIdManager().getId(parameterIds[i])
-        );
+        this._parameterIds.pushBack(this.resolveIdHandle(parameterIds[i]));
       }
     }
 
@@ -1411,9 +1419,7 @@ export class CubismModel {
 
       this._partIds.prepareCapacity(partCount);
       for (let i = 0; i < partCount; ++i) {
-        this._partIds.pushBack(
-          CubismFramework.getIdManager().getId(partIds[i])
-        );
+        this._partIds.pushBack(this.resolveIdHandle(partIds[i]));
       }
 
       this._userPartMultiplyColors.prepareCapacity(partCount);
@@ -1493,9 +1499,7 @@ export class CubismModel {
             screenColor
           );
 
-          this._drawableIds.pushBack(
-            CubismFramework.getIdManager().getId(drawableIds[i])
-          );
+          this._drawableIds.pushBack(this.resolveIdHandle(drawableIds[i]));
 
           this._userMultiplyColors.pushBack(userMultiplyColor);
           this._userScreenColors.pushBack(userScreenColor);
@@ -1541,6 +1545,7 @@ export class CubismModel {
     this._notExistParameterId = new csmMap<CubismIdHandle, number>();
     this._notExistParameterValues = new csmMap<number, number>();
     this._notExistPartOpacities = new csmMap<number, number>();
+    this._idHandleCache = new Map<string, CubismIdHandle>();
   }
 
   /**
@@ -1580,6 +1585,7 @@ export class CubismModel {
   private _parameterIds: csmVector<CubismIdHandle>;
   private _partIds: csmVector<CubismIdHandle>;
   private _drawableIds: csmVector<CubismIdHandle>;
+  private _idHandleCache: Map<string, CubismIdHandle>;
 
   private _isOverwrittenCullings: boolean; // モデルのカリング設定をすべて上書きするか？
   private _userCullings: csmVector<DrawableCullingData>; // カリング設定の配列
