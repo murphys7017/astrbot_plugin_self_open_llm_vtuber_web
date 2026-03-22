@@ -10,6 +10,11 @@
 - 对应后端插件仓库：[murphys7017/astrbot_plugin_self_open_llm_vtuber](https://github.com/murphys7017/astrbot_plugin_self_open_llm_vtuber)
 - 主要运行方式：前端使用 `npm run dev`，后端由 AstrBot 插件提供 WebSocket 与静态资源服务
 
+## 阶段更新文档
+
+- 近期桌宠模式改造与修复汇总：
+  [阶段更新_2026-03-23.md](docs/阶段更新_2026-03-23.md)
+
 ## 相比原项目的主要改动
 
 ### 1. 接入 AstrBot 自定义协议
