@@ -169,16 +169,29 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
 
   // External hooks and contexts
   const { interrupt } = useInterrupt();
-  const { sendAudioPartition } = useSendAudio();
+  const {
+    startAudioStream,
+    sendAudioStreamFrame,
+    finishAudioStream,
+    interruptAudioStream,
+  } = useSendAudio();
   const { setSubtitleText } = useContext(SubtitleContext)!;
   const { aiState, setAiState } = useContext(AiStateContext)!;
 
   // Refs for callback stability
   const interruptRef = useRef(interrupt);
-  const sendAudioPartitionRef = useRef(sendAudioPartition);
+  const startAudioStreamRef = useRef(startAudioStream);
+  const sendAudioStreamFrameRef = useRef(sendAudioStreamFrame);
+  const finishAudioStreamRef = useRef(finishAudioStream);
+  const interruptAudioStreamRef = useRef(interruptAudioStream);
   const aiStateRef = useRef<AiState>(aiState);
   const setSubtitleTextRef = useRef(setSubtitleText);
   const setAiStateRef = useRef(setAiState);
+  const audioStreamStateRef = useRef<{
+    streamId: string
+    nextSeq: number
+    totalSamples: number
+  } | null>(null);
 
   const isProcessingRef = useRef(false);
 
@@ -259,8 +272,20 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
   }, [interrupt]);
 
   useEffect(() => {
-    sendAudioPartitionRef.current = sendAudioPartition;
-  }, [sendAudioPartition]);
+    startAudioStreamRef.current = startAudioStream;
+  }, [startAudioStream]);
+
+  useEffect(() => {
+    sendAudioStreamFrameRef.current = sendAudioStreamFrame;
+  }, [sendAudioStreamFrame]);
+
+  useEffect(() => {
+    finishAudioStreamRef.current = finishAudioStream;
+  }, [finishAudioStream]);
+
+  useEffect(() => {
+    interruptAudioStreamRef.current = interruptAudioStream;
+  }, [interruptAudioStream]);
 
   useEffect(() => {
     setSubtitleTextRef.current = setSubtitleText;
@@ -313,6 +338,7 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
     // Save current AI state but DON'T change to listening yet
     previousAiStateRef.current = aiStateRef.current;
     isProcessingRef.current = true;
+    audioStreamStateRef.current = startAudioStreamRef.current();
     // Don't change state here - wait for onSpeechRealStart
   }, []);
 
@@ -333,16 +359,25 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
   /**
    * Handle frame processing event
    */
-  const handleFrameProcessed = useCallback((probs: { isSpeech: number }) => {
+  const handleFrameProcessed = useCallback((probs: { isSpeech: number }, frame?: Float32Array) => {
     if (probs.isSpeech > previousTriggeredProbabilityRef.current) {
       setPreviousTriggeredProbability(probs.isSpeech);
     }
+
+    if (!isProcessingRef.current || !frame || frame.length === 0) {
+      return;
+    }
+
+    audioStreamStateRef.current = sendAudioStreamFrameRef.current(
+      audioStreamStateRef.current,
+      frame,
+    );
   }, []);
 
   /**
    * Handle speech end event
    */
-  const handleSpeechEnd = useCallback((audio: Float32Array) => {
+  const handleSpeechEnd = useCallback((_audio: Float32Array) => {
     if (!isProcessingRef.current) return;
     console.log('Speech ended');
     audioTaskQueue.clearQueue();
@@ -354,7 +389,9 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
     }
 
     setPreviousTriggeredProbability(0);
-    void sendAudioPartitionRef.current(audio)
+    const currentStreamState = audioStreamStateRef.current;
+    audioStreamStateRef.current = null;
+    void finishAudioStreamRef.current(currentStreamState)
       .catch((error) => {
         console.error('Failed to send captured audio to backend:', error);
         toaster.create({
@@ -377,6 +414,8 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
     console.log('VAD misfire detected');
     setPreviousTriggeredProbability(0);
     isProcessingRef.current = false;
+    interruptAudioStreamRef.current(audioStreamStateRef.current);
+    audioStreamStateRef.current = null;
 
     // Restore previous AI state and show helpful misfire message
     setAiStateRef.current(previousAiStateRef.current);
@@ -527,6 +566,8 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
       currentStreamRef.current.getTracks().forEach((track) => track.stop());
       currentStreamRef.current = null;
     }
+    interruptAudioStreamRef.current(audioStreamStateRef.current);
+    audioStreamStateRef.current = null;
     setMicOn(false);
     isProcessingRef.current = false;
   }, []);
