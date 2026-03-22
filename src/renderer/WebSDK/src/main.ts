@@ -12,10 +12,27 @@ import * as LAppDefine from "./lappdefine";
 import { LAppGlManager } from "./lappglmanager";
 import { LAppLive2DManager } from "./lapplive2dmanager";
 
+let isInitializingLive2D = false;
+let pendingInitializeLive2D = false;
+
 /**
  * Initialize the Live2D application
  */
 export function initializeLive2D(): void {
+  if (isInitializingLive2D) {
+    pendingInitializeLive2D = true;
+    return;
+  }
+  isInitializingLive2D = true;
+
+  const finishInitialize = () => {
+    isInitializingLive2D = false;
+    if (pendingInitializeLive2D) {
+      pendingInitializeLive2D = false;
+      setTimeout(() => initializeLive2D(), 0);
+    }
+  };
+
   console.log(
     "Initializing Live2D with resourcePath:",
     LAppDefine.ResourcesPath
@@ -29,9 +46,11 @@ export function initializeLive2D(): void {
       const retryCanvas = document.getElementById('canvas');
       if (!retryCanvas) {
         console.error('Live2D initialization skipped: canvas element not found.');
+        finishInitialize();
         return;
       }
       initializeLive2D();
+      finishInitialize();
     }, 120);
     return;
   }
@@ -47,6 +66,7 @@ export function initializeLive2D(): void {
     !LAppDelegate.getInstance().initialize()
   ) {
     console.error("Failed to initialize Live2D");
+    finishInitialize();
     return;
   }
 
@@ -91,6 +111,8 @@ export function initializeLive2D(): void {
       console.log("Model clicked:", isHit, hitAreaName ? `in area: ${hitAreaName}` : '');
     });
   }
+
+  finishInitialize();
 }
 
 /**
