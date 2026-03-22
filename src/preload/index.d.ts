@@ -13,6 +13,19 @@ declare global {
       onMicToggle: (callback: () => void) => void
       onInterrupt: (callback: () => void) => void
       updateComponentHover: (componentId: string, isHovering: boolean) => void
+      startPetWindowDrag: (screenX: number, screenY: number) => void
+      movePetWindowDrag: (screenX: number, screenY: number) => void
+      endPetWindowDrag: () => void
+      setPetInputFocus: (focused: boolean) => void
+      sendPetOverlayText: (text: string) => void
+      sendPetOverlayMicToggle: () => void
+      sendPetOverlayInterrupt: () => void
+      sendPetOverlayState: (state: { aiState: string; lastAIMessage: string; micOn: boolean }) => void
+      onPetOverlayState: (callback: (state: { aiState: string; lastAIMessage: string; micOn: boolean }) => void) => () => void
+      onPetOverlaySendText: (callback: (text: string) => void) => () => void
+      onPetOverlayMicToggle: (callback: () => void) => () => void
+      onPetOverlayInterrupt: (callback: () => void) => () => void
+      setPetOverlayPreferredHeight: (height: number) => void
       onToggleInputSubtitle: (callback: () => void) => void
       onToggleScrollToResize: (callback: () => void) => void
       onSwitchCharacter: (callback: (filename: string) => void) => void

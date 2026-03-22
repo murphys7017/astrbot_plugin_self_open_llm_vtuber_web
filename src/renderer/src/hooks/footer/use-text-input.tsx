@@ -45,7 +45,7 @@ export function useTextInput() {
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (isComposing) return;
+    if (isComposing || (e.nativeEvent as any)?.isComposing) return;
 
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();

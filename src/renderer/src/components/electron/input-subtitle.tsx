@@ -48,9 +48,15 @@ export function InputSubtitle() {
 
   const [isVisible, setIsVisible] = useState(true);
 
+  const markInputFocus = useCallback((focused: boolean) => {
+    if (!isPet) return;
+    window.api?.setPetInputFocus?.(focused);
+  }, [isPet]);
+
   const handleClose = useCallback(() => {
     if (isPet) {
       (window.api as any)?.updateComponentHover('input-subtitle', false);
+      window.api?.setPetInputFocus?.(false);
     }
     setIsVisible(false);
   }, [isPet]);
@@ -80,6 +86,7 @@ export function InputSubtitle() {
     };
 
     return () => {
+      window.api?.setPetInputFocus?.(false);
       delete (window as any).inputSubtitle;
     };
   }, [isPet, handleClose]);
@@ -153,6 +160,9 @@ export function InputSubtitle() {
               onKeyDown={handleKeyPress}
               onCompositionStart={handleCompositionStart}
               onCompositionEnd={handleCompositionEnd}
+              onMouseDown={() => markInputFocus(true)}
+              onFocus={() => markInputFocus(true)}
+              onBlur={() => markInputFocus(false)}
               placeholder="Type your message..."
               {...inputSubtitleStyles.input}
             />

@@ -102,10 +102,12 @@ export const useLive2DModel = ({
   const prevModelUrlRef = useRef<string | null>(null);
   const isHoveringModelRef = useRef(false);
   const electronApi = (window as any).electron;
+  const nativeApi = (window as any).api;
 
   // --- State for Tap vs Drag ---
   const mouseDownTimeRef = useRef<number>(0);
   const mouseDownPosRef = useRef<Position>({ x: 0, y: 0 }); // Screen coords at mousedown
+  const mouseDownScreenPosRef = useRef<Position>({ x: 0, y: 0 });
   const isPotentialTapRef = useRef<boolean>(false); // Flag for ongoing potential tap/drag action
   // ---
 
@@ -230,6 +232,7 @@ export const useLive2DModel = ({
       // Record potential tap/drag start
       mouseDownTimeRef.current = Date.now();
       mouseDownPosRef.current = { x: e.clientX, y: e.clientY }; // Use clientX/Y for distance check
+      mouseDownScreenPosRef.current = { x: e.screenX, y: e.screenY };
       isPotentialTapRef.current = true;
       setIsDragging(false); // Ensure dragging is false initially
 
@@ -257,6 +260,12 @@ export const useLive2DModel = ({
       if (distanceMoved > DRAG_DISTANCE_THRESHOLD_PX || (timeElapsed > TAP_DURATION_THRESHOLD_MS && distanceMoved > 1)) {
         isPotentialTapRef.current = false; // It's a drag, not a tap
         setIsDragging(true);
+        if (isPet) {
+          nativeApi?.startPetWindowDrag?.(
+            mouseDownScreenPosRef.current.x,
+            mouseDownScreenPosRef.current.y,
+          );
+        }
 
         // Set initial drag screen position using the position from mousedown
         const canvas = canvasRef.current;
@@ -271,6 +280,11 @@ export const useLive2DModel = ({
     // --- End Start Drag Logic ---
 
     // --- Continue Drag Logic ---
+    if (isDragging && isPet) {
+      nativeApi?.movePetWindowDrag?.(e.screenX, e.screenY);
+      return;
+    }
+
     if (isDragging && adapter && view && model && canvasRef.current) {
       const canvas = canvasRef.current;
       const rect = canvas.getBoundingClientRect();
@@ -310,28 +324,7 @@ export const useLive2DModel = ({
       setPosition({ x: newX, y: newY }); // Update React state if needed for UI feedback
     }
     // --- End Continue Drag Logic ---
-
-    // --- Pet Hover Logic (Unchanged) ---
-    if (isPet && !isDragging && !isPotentialTapRef.current && electronApi && adapter && view && model && canvasRef.current) {
-      const canvas = canvasRef.current;
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      const scale = canvas.width / canvas.clientWidth;
-      const scaledX = x * scale;
-      const scaledY = y * scale;
-      const modelX = view._deviceToScreen.transformX(scaledX);
-      const modelY = view._deviceToScreen.transformY(scaledY);
-
-      const currentHitState = model.anyhitTest(modelX, modelY) !== null || model.isHitOnModel(modelX, modelY);
-
-      if (currentHitState !== isHoveringModelRef.current) {
-        isHoveringModelRef.current = currentHitState;
-        electronApi.ipcRenderer.send('update-component-hover', 'live2d-model', currentHitState);
-      }
-    }
-    // --- End Pet Hover Logic ---
-  }, [isPet, isDragging, electronApi, canvasRef]);
+  }, [isPet, isDragging, canvasRef, nativeApi]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
     const adapter = (window as any).getLAppAdapter?.();
@@ -341,7 +334,9 @@ export const useLive2DModel = ({
     if (isDragging) {
       // Finalize drag
       setIsDragging(false);
-      if (adapter) {
+      if (isPet) {
+        nativeApi?.endPetWindowDrag?.();
+      } else if (adapter) {
         const currentModel = adapter.getModel(); // Re-get model in case adapter changed
         if (currentModel && currentModel._modelMatrix) {
           const matrix = currentModel._modelMatrix.getArray();
@@ -382,7 +377,14 @@ export const useLive2DModel = ({
 
     // Reset potential tap flag regardless of outcome
     isPotentialTapRef.current = false;
-  }, [isDragging, canvasRef, modelInfo]);
+  }, [isDragging, isPet, canvasRef, modelInfo, nativeApi]);
+
+  const handleMouseEnter = useCallback(() => {
+    if (isPet && electronApi && !isHoveringModelRef.current) {
+      isHoveringModelRef.current = true;
+      electronApi.ipcRenderer.send('update-component-hover', 'live2d-model', true);
+    }
+  }, [isPet, electronApi]);
 
   const handleMouseLeave = useCallback(() => {
     if (isDragging) {
@@ -403,6 +405,7 @@ export const useLive2DModel = ({
   useEffect(() => {
     if (!isPet && electronApi && isHoveringModelRef.current) {
       isHoveringModelRef.current = false;
+      electronApi.ipcRenderer.send('update-component-hover', 'live2d-model', false);
     }
   }, [isPet, electronApi]);
 
@@ -534,6 +537,7 @@ Live2DDebug.playRandomMotion("")  // Play random motion from default group
     isDragging,
     handlers: {
       onMouseDown: handleMouseDown,
+      onMouseEnter: handleMouseEnter,
       onMouseMove: handleMouseMove,
       onMouseUp: handleMouseUp,
       onMouseLeave: handleMouseLeave,

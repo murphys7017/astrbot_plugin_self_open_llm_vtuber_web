@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { useMode } from '@/context/mode-context';
+
 interface Position {
   x: number
   y: number
@@ -25,6 +26,8 @@ export function useDraggable({ componentId }: UseDraggableProps) {
   const positionRef = useRef<Position>({ x: 0, y: 0 });
   const dragStartRef = useRef<Position>({ x: 0, y: 0 });
   const elementRef = useRef<HTMLDivElement>(null);
+  const isInteractiveTarget = (target: EventTarget | null) => target instanceof HTMLElement
+    && Boolean(target.closest('input,textarea,button,[role="button"],[data-no-drag="true"]'));
 
   /**
    * Handle mouse enter event for pet mode
@@ -51,7 +54,32 @@ export function useDraggable({ componentId }: UseDraggableProps) {
    * Sets up mouse move and mouse up listeners
    */
   const handleMouseDown = (e: React.MouseEvent) => {
+    if (isInteractiveTarget(e.target)) {
+      return;
+    }
+
+    e.preventDefault();
     setIsDragging(true);
+
+    if (isPet && window.api?.startPetWindowDrag) {
+      window.api.startPetWindowDrag(e.screenX, e.screenY);
+
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        window.api?.movePetWindowDrag?.(moveEvent.screenX, moveEvent.screenY);
+      };
+
+      const handleMouseUp = () => {
+        setIsDragging(false);
+        window.api?.endPetWindowDrag?.();
+        document.removeEventListener('mousemove', handleMouseMove, true);
+        document.removeEventListener('mouseup', handleMouseUp, true);
+      };
+
+      document.addEventListener('mousemove', handleMouseMove, true);
+      document.addEventListener('mouseup', handleMouseUp, true);
+      return;
+    }
+
     // Calculate the initial offset
     dragStartRef.current = {
       x: e.clientX - positionRef.current.x,

@@ -47,6 +47,55 @@ const api = {
   updateComponentHover: (componentId: string, isHovering: boolean) => {
     ipcRenderer.send('update-component-hover', componentId, isHovering);
   },
+  startPetWindowDrag: (screenX: number, screenY: number) => {
+    ipcRenderer.send('pet-window-drag-start', screenX, screenY);
+  },
+  movePetWindowDrag: (screenX: number, screenY: number) => {
+    ipcRenderer.send('pet-window-drag-move', screenX, screenY);
+  },
+  endPetWindowDrag: () => {
+    ipcRenderer.send('pet-window-drag-end');
+  },
+  setPetInputFocus: (focused: boolean) => {
+    ipcRenderer.send('pet-input-focus-changed', focused);
+  },
+  sendPetOverlayText: (text: string) => {
+    ipcRenderer.send('pet-overlay-action-send-text', text);
+  },
+  sendPetOverlayMicToggle: () => {
+    ipcRenderer.send('pet-overlay-action-mic-toggle');
+  },
+  sendPetOverlayInterrupt: () => {
+    ipcRenderer.send('pet-overlay-action-interrupt');
+  },
+  sendPetOverlayState: (state: { aiState: string; lastAIMessage: string; micOn: boolean }) => {
+    ipcRenderer.send('pet-overlay-state-update', state);
+  },
+  onPetOverlayState: (
+    callback: (state: { aiState: string; lastAIMessage: string; micOn: boolean }) => void,
+  ) => {
+    const handler = (_event: any, state: { aiState: string; lastAIMessage: string; micOn: boolean }) => callback(state);
+    ipcRenderer.on('pet-overlay-state-update', handler);
+    return () => ipcRenderer.removeListener('pet-overlay-state-update', handler);
+  },
+  onPetOverlaySendText: (callback: (text: string) => void) => {
+    const handler = (_event: any, text: string) => callback(text);
+    ipcRenderer.on('pet-overlay-send-text', handler);
+    return () => ipcRenderer.removeListener('pet-overlay-send-text', handler);
+  },
+  onPetOverlayMicToggle: (callback: () => void) => {
+    const handler = (_event: any) => callback();
+    ipcRenderer.on('pet-overlay-mic-toggle', handler);
+    return () => ipcRenderer.removeListener('pet-overlay-mic-toggle', handler);
+  },
+  onPetOverlayInterrupt: (callback: () => void) => {
+    const handler = (_event: any) => callback();
+    ipcRenderer.on('pet-overlay-interrupt', handler);
+    return () => ipcRenderer.removeListener('pet-overlay-interrupt', handler);
+  },
+  setPetOverlayPreferredHeight: (height: number) => {
+    ipcRenderer.send('pet-overlay-preferred-height', height);
+  },
   onToggleInputSubtitle: (callback: () => void) => {
     const handler = (_event: any) => callback();
     ipcRenderer.on('toggle-input-subtitle', handler);

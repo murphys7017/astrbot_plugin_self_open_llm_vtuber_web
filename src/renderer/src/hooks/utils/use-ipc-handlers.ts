@@ -57,12 +57,21 @@ export function useIpcHandlers() {
     if (!window.electron?.ipcRenderer) return;
     if (!isPet) return;
 
-    window.electron.ipcRenderer.removeAllListeners("mic-toggle");
-    window.electron.ipcRenderer.removeAllListeners("interrupt");
-    window.electron.ipcRenderer.removeAllListeners("toggle-scroll-to-resize");
-    window.electron.ipcRenderer.removeAllListeners("switch-character");
-    window.electron.ipcRenderer.removeAllListeners("toggle-force-ignore-mouse");
-    window.electron.ipcRenderer.removeAllListeners("force-ignore-mouse-changed");
+    window.electron.ipcRenderer.removeListener("mic-toggle", micToggleHandler);
+    window.electron.ipcRenderer.removeListener("interrupt", interruptHandler);
+    window.electron.ipcRenderer.removeListener(
+      "toggle-scroll-to-resize",
+      scrollToResizeHandler,
+    );
+    window.electron.ipcRenderer.removeListener("switch-character", switchCharacterHandler);
+    window.electron.ipcRenderer.removeListener(
+      "toggle-force-ignore-mouse",
+      toggleForceIgnoreMouseHandler,
+    );
+    window.electron.ipcRenderer.removeListener(
+      "force-ignore-mouse-changed",
+      forceIgnoreMouseChangedHandler,
+    );
 
     window.electron.ipcRenderer.on("mic-toggle", micToggleHandler);
     window.electron.ipcRenderer.on("interrupt", interruptHandler);
@@ -81,14 +90,21 @@ export function useIpcHandlers() {
     );
 
     return () => {
-      window.electron?.ipcRenderer.removeAllListeners("mic-toggle");
-      window.electron?.ipcRenderer.removeAllListeners("interrupt");
-      window.electron?.ipcRenderer.removeAllListeners(
+      window.electron?.ipcRenderer.removeListener("mic-toggle", micToggleHandler);
+      window.electron?.ipcRenderer.removeListener("interrupt", interruptHandler);
+      window.electron?.ipcRenderer.removeListener(
         "toggle-scroll-to-resize",
+        scrollToResizeHandler,
       );
-      window.electron?.ipcRenderer.removeAllListeners("switch-character");
-      window.electron?.ipcRenderer.removeAllListeners("toggle-force-ignore-mouse");
-      window.electron?.ipcRenderer.removeAllListeners("force-ignore-mouse-changed");
+      window.electron?.ipcRenderer.removeListener("switch-character", switchCharacterHandler);
+      window.electron?.ipcRenderer.removeListener(
+        "toggle-force-ignore-mouse",
+        toggleForceIgnoreMouseHandler,
+      );
+      window.electron?.ipcRenderer.removeListener(
+        "force-ignore-mouse-changed",
+        forceIgnoreMouseChangedHandler,
+      );
     };
   }, [
     micToggleHandler,

@@ -28,6 +28,16 @@ import Background from "./components/canvas/background";
 import WebSocketStatus from "./components/canvas/ws-status";
 import Subtitle from "./components/canvas/subtitle";
 import { ModeProvider, useMode } from "./context/mode-context";
+import { PetOverlayWindow } from "./components/electron/pet-overlay-window";
+import { usePetOverlayBridge } from "./hooks/utils/use-pet-overlay-bridge";
+
+const isPetOverlayRenderer = (): boolean => {
+  try {
+    return new URLSearchParams(window.location.search).get("petOverlay") === "1";
+  } catch (_error) {
+    return false;
+  }
+};
 
 function AppContent(): JSX.Element {
   const [showSidebar, setShowSidebar] = useState(true);
@@ -149,12 +159,20 @@ function AppContent(): JSX.Element {
       )}
 
       {/* Conditional Rendering of Pet Mode UI */}
-      {mode === "pet" && <InputSubtitle />}
+      {mode === "pet" && !isElectron && <InputSubtitle />}
     </>
   );
 }
 
 function App(): JSX.Element {
+  if (isPetOverlayRenderer()) {
+    return (
+      <ChakraProvider value={defaultSystem}>
+        <PetOverlayWindow />
+      </ChakraProvider>
+    );
+  }
+
   return (
     <ChakraProvider value={defaultSystem}>
       {/* ModeProvider needs to wrap AppContent to provide mode to getGlobalStyles */}
@@ -181,6 +199,7 @@ function AppWithGlobalStyles(): JSX.Element {
                         <BgUrlProvider>
                           <BrowserProvider>
                             <WebSocketHandler>
+                              <PetOverlayBridge />
                               <Toaster />
                               <AppContent />
                             </WebSocketHandler>
@@ -197,6 +216,11 @@ function AppWithGlobalStyles(): JSX.Element {
       </CameraProvider>
     </>
   );
+}
+
+function PetOverlayBridge(): null {
+  usePetOverlayBridge();
+  return null;
 }
 
 export default App;
