@@ -109,8 +109,8 @@ export class WindowManager {
       this.endPetWindowDrag();
     });
 
-    ipcMain.on('pet-overlay-action-send-text', (_event, text: string) => {
-      this.window?.webContents.send('pet-overlay-send-text', text);
+    ipcMain.on('pet-overlay-action-send-text', (_event, payload: { text?: string; timestamp?: number } | string) => {
+      this.window?.webContents.send('pet-overlay-send-text', payload);
     });
 
     ipcMain.on('pet-overlay-action-mic-toggle', () => {
@@ -477,7 +477,7 @@ export class WindowManager {
     );
 
     const bounds = this.petOverlayWindow.getBounds();
-    if (bounds.height === nextHeight) return;
+    if (Math.abs(bounds.height - nextHeight) < 3) return;
 
     const nextBounds = {
       ...bounds,

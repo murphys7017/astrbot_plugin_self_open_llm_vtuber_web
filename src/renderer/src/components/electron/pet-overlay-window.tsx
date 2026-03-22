@@ -20,6 +20,8 @@ export function PetOverlayWindow(): JSX.Element {
   const [lastAIMessage, setLastAIMessage] = useState('');
   const [micOn, setMicOn] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
+  const lastReportedHeightRef = useRef<number>(0);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const cleanup = window.api?.onPetOverlayState?.((state) => {
@@ -104,9 +106,13 @@ export function PetOverlayWindow(): JSX.Element {
   }, []);
 
   const sendText = useCallback(() => {
-    const text = inputValue.trim();
+    const currentValue = inputRef.current?.value ?? inputValue;
+    const text = currentValue.trim();
     if (!text) return;
-    window.api?.sendPetOverlayText?.(text);
+    window.api?.sendPetOverlayText?.({
+      text,
+      timestamp: Date.now(),
+    });
     setInputValue('');
   }, [inputValue]);
 
@@ -135,23 +141,18 @@ export function PetOverlayWindow(): JSX.Element {
   useEffect(() => {
     if (!window.api?.setPetOverlayPreferredHeight) return undefined;
 
-    const updateHeight = () => {
+    const rafId = requestAnimationFrame(() => {
       if (!contentRef.current) return;
-      const preferredHeight = contentRef.current.scrollHeight + 20;
+      const preferredHeight = Math.round(contentRef.current.scrollHeight + 20);
+      if (Math.abs(preferredHeight - lastReportedHeightRef.current) < 3) return;
+      lastReportedHeightRef.current = preferredHeight;
       window.api?.setPetOverlayPreferredHeight?.(preferredHeight);
-    };
-
-    const rafId = requestAnimationFrame(updateHeight);
-    const observer = new ResizeObserver(() => updateHeight());
-    if (contentRef.current) {
-      observer.observe(contentRef.current);
-    }
+    });
 
     return () => {
       cancelAnimationFrame(rafId);
-      observer.disconnect();
     };
-  }, []);
+  }, [lastAIMessage, aiState, micOn]);
 
   return (
     <Box
@@ -219,6 +220,7 @@ export function PetOverlayWindow(): JSX.Element {
 
         <HStack gap="8px">
           <Input
+            ref={inputRef}
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onCompositionStart={() => setIsComposing(true)}

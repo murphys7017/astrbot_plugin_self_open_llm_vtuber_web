@@ -27,6 +27,14 @@ console.error = (...args: any[]) => {
 };
 
 if (typeof window !== 'undefined') {
+  const isPetOverlayRenderer = (() => {
+    try {
+      return new URLSearchParams(window.location.search).get('petOverlay') === '1';
+    } catch (_error) {
+      return false;
+    }
+  })();
+
   (window as any).getLAppAdapter = () => LAppAdapter.getInstance();
 
   // Dynamically load the Live2D Core script
@@ -46,19 +54,26 @@ if (typeof window !== 'undefined') {
     });
   };
 
-  // Load the script and then render the app
-  loadLive2DCore()
-    .then(() => {
-      createRoot(document.getElementById('root')!).render(
-        <App />,
-      );
-    })
-    .catch((error) => {
-      console.error('Application failed to start due to script loading error:', error);
-      // Optionally render an error message to the user
-      const rootElement = document.getElementById('root');
-      if (rootElement) {
-        rootElement.innerHTML = 'Error loading required components. Please check the console for details.';
-      }
-    });
+  // Overlay renderer does not need Live2D Core.
+  if (isPetOverlayRenderer) {
+    createRoot(document.getElementById('root')!).render(
+      <App />,
+    );
+  } else {
+    // Load the script and then render the app
+    loadLive2DCore()
+      .then(() => {
+        createRoot(document.getElementById('root')!).render(
+          <App />,
+        );
+      })
+      .catch((error) => {
+        console.error('Application failed to start due to script loading error:', error);
+        // Optionally render an error message to the user
+        const rootElement = document.getElementById('root');
+        if (rootElement) {
+          rootElement.innerHTML = 'Error loading required components. Please check the console for details.';
+        }
+      });
+  }
 }

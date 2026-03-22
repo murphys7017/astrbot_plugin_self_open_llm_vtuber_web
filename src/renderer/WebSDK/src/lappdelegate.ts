@@ -63,6 +63,11 @@ export class LAppDelegate {
    * Initialize the application.
    */
   public initialize(): boolean {
+    if (!canvas || !gl) {
+      console.error('Live2D initialize failed: canvas or webgl context is unavailable.');
+      return false;
+    }
+
     // Comment out the following code since canvas already exists in DOM
     // let parent = document.getElementById('live2d');
     // if (parent) {
@@ -74,34 +79,36 @@ export class LAppDelegate {
     if (LAppDefine.CanvasSize === 'auto') {
       this._resizeCanvas();
     } else {
-      canvas!.width = LAppDefine.CanvasSize.width;
-      canvas!.height = LAppDefine.CanvasSize.height;
+      canvas.width = LAppDefine.CanvasSize.width;
+      canvas.height = LAppDefine.CanvasSize.height;
     }
 
     if (!frameBuffer) {
-      frameBuffer = gl!.getParameter(gl!.FRAMEBUFFER_BINDING);
+      frameBuffer = gl.getParameter(gl.FRAMEBUFFER_BINDING);
     }
 
     // 透過設定
     // 透明设置
-    gl!.enable(gl!.BLEND);
-    gl!.blendFunc(gl!.SRC_ALPHA, gl!.ONE_MINUS_SRC_ALPHA);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-    const supportTouch: boolean = 'ontouchend' in canvas!;
+    const supportTouch: boolean = 'ontouchend' in canvas;
+    this._boundCanvas = canvas;
+    this._useTouchEvents = supportTouch;
 
     if (supportTouch) {
       // タッチ関連コールバック関数登録
       // 注册触摸相关回调函数
-      canvas!.addEventListener('touchstart', onTouchBegan, { passive: true });
-      canvas!.addEventListener('touchmove', onTouchMoved, { passive: true });
-      canvas!.addEventListener('touchend', onTouchEnded, { passive: true });
-      canvas!.addEventListener('touchcancel', onTouchCancel, { passive: true });
+      canvas.addEventListener('touchstart', onTouchBegan, { passive: true });
+      canvas.addEventListener('touchmove', onTouchMoved, { passive: true });
+      canvas.addEventListener('touchend', onTouchEnded, { passive: true });
+      canvas.addEventListener('touchcancel', onTouchCancel, { passive: true });
     } else {
       // マウス関連コールバック関数登録
       // 注册鼠标相关回调函数
-      canvas!.addEventListener('mousedown', onClickBegan, { passive: true });
-      canvas!.addEventListener('mousemove', onMouseMoved, { passive: true });
-      canvas!.addEventListener('mouseup', onClickEnded, { passive: true });
+      canvas.addEventListener('mousedown', onClickBegan, { passive: true });
+      canvas.addEventListener('mousemove', onMouseMoved, { passive: true });
+      canvas.addEventListener('mouseup', onClickEnded, { passive: true });
     }
 
     // AppViewの初期化
@@ -148,6 +155,26 @@ export class LAppDelegate {
    * 解放する。
    */
   public release(): void {
+    this._isRunning = false;
+    if (this._rafId !== null) {
+      cancelAnimationFrame(this._rafId);
+      this._rafId = null;
+    }
+
+    if (this._boundCanvas) {
+      if (this._useTouchEvents) {
+        this._boundCanvas.removeEventListener('touchstart', onTouchBegan);
+        this._boundCanvas.removeEventListener('touchmove', onTouchMoved);
+        this._boundCanvas.removeEventListener('touchend', onTouchEnded);
+        this._boundCanvas.removeEventListener('touchcancel', onTouchCancel);
+      } else {
+        this._boundCanvas.removeEventListener('mousedown', onClickBegan);
+        this._boundCanvas.removeEventListener('mousemove', onMouseMoved);
+        this._boundCanvas.removeEventListener('mouseup', onClickEnded);
+      }
+      this._boundCanvas = null;
+    }
+
     this._textureManager!.release();
     this._textureManager = null;
 
@@ -166,12 +193,19 @@ export class LAppDelegate {
    * 执行处理。
    */
   public run(): void {
+    if (this._isRunning) {
+      return;
+    }
+    this._isRunning = true;
+
     // メインループ
     // 主循环
     const loop = (): void => {
       // インスタンスの有無の確認
       // 检查实例是否存在
       if (s_instance == null) {
+        this._isRunning = false;
+        this._rafId = null;
         return;
       }
 
@@ -179,7 +213,7 @@ export class LAppDelegate {
       if (LAppDefine.ENABLE_LIMITED_FRAME_RATE) {
         LAppPal.updateTime(false);
         if (LAppPal.getDeltaTime() < 1 / LAppDefine.LIMITED_FRAME_RATE) {
-          requestAnimationFrame(loop);
+          this._rafId = requestAnimationFrame(loop);
           return;
         }
       }
@@ -215,7 +249,7 @@ export class LAppDelegate {
 
       // ループのために再帰呼び出し
       // 递归调用以进行循环
-      requestAnimationFrame(loop);
+      this._rafId = requestAnimationFrame(loop);
     };
     loop();
   }
@@ -306,6 +340,10 @@ export class LAppDelegate {
     this._mouseX = 0.0;
     this._mouseY = 0.0;
     this._isEnd = false;
+    this._isRunning = false;
+    this._rafId = null;
+    this._boundCanvas = null;
+    this._useTouchEvents = false;
 
     this._cubismOption = new Option();
     this._view = new LAppView();
@@ -336,15 +374,17 @@ export class LAppDelegate {
    * Resize the canvas to fill the screen.
    */
   private _resizeCanvas(): void {
-    if (!canvas) {
+    if (!canvas || !gl) {
       console.warn("Canvas is null, skipping resize");
       return;
     }
-    canvas.width = canvas.clientWidth * window.devicePixelRatio;
-    canvas.height = canvas.clientHeight * window.devicePixelRatio;
-    if (gl) {
-      gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
-    }
+    const dpr = window.devicePixelRatio || 1;
+    const targetWidth = Math.max(1, Math.round(canvas.clientWidth * dpr));
+    const targetHeight = Math.max(1, Math.round(canvas.clientHeight * dpr));
+
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
   }
 
   _cubismOption: Option; // Cubism SDK Option
@@ -353,6 +393,10 @@ export class LAppDelegate {
   _mouseX: number; // マウスX座標 // 鼠标X坐标
   _mouseY: number; // マウスY座標 // 鼠标Y坐标
   _isEnd: boolean; // APP終了しているか // APP是否已结束
+  _isRunning: boolean; // 主循环是否在运行
+  _rafId: number | null; // requestAnimationFrame id
+  _boundCanvas: HTMLCanvasElement | null; // 当前绑定监听器的 canvas
+  _useTouchEvents: boolean; // 当前是否使用 touch 事件绑定
   _textureManager: LAppTextureManager | null; // テクスチャマネージャー // 纹理管理器
 }
 

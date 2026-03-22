@@ -59,8 +59,8 @@ const api = {
   setPetInputFocus: (focused: boolean) => {
     ipcRenderer.send('pet-input-focus-changed', focused);
   },
-  sendPetOverlayText: (text: string) => {
-    ipcRenderer.send('pet-overlay-action-send-text', text);
+  sendPetOverlayText: (payload: { text: string; timestamp?: number } | string) => {
+    ipcRenderer.send('pet-overlay-action-send-text', payload);
   },
   sendPetOverlayMicToggle: () => {
     ipcRenderer.send('pet-overlay-action-mic-toggle');
@@ -78,8 +78,8 @@ const api = {
     ipcRenderer.on('pet-overlay-state-update', handler);
     return () => ipcRenderer.removeListener('pet-overlay-state-update', handler);
   },
-  onPetOverlaySendText: (callback: (text: string) => void) => {
-    const handler = (_event: any, text: string) => callback(text);
+  onPetOverlaySendText: (callback: (payload: { text: string; timestamp?: number } | string) => void) => {
+    const handler = (_event: any, payload: { text: string; timestamp?: number } | string) => callback(payload);
     ipcRenderer.on('pet-overlay-send-text', handler);
     return () => ipcRenderer.removeListener('pet-overlay-send-text', handler);
   },

@@ -187,7 +187,12 @@ export class CubismUserModel {
       CubismLogError('Failed to loadExpression().');
       return null;
     }
-    return CubismExpressionMotion.create(buffer, size);
+    try {
+      return CubismExpressionMotion.create(buffer, size);
+    } catch (error) {
+      CubismLogError(`Failed to parse expression motion: ${name}`);
+      return null;
+    }
   }
 
   /**

@@ -56,15 +56,43 @@ function AppContent(): JSX.Element {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-    
-  document.documentElement.style.overflow = 'hidden';
-  document.body.style.overflow = 'hidden';
-  document.documentElement.style.height = '100%';
-  document.body.style.height = '100%';
-  document.documentElement.style.position = 'fixed';
-  document.body.style.position = 'fixed';
-  document.documentElement.style.width = '100%';
-  document.body.style.width = '100%';
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+
+    const prevHtml = {
+      overflow: html.style.overflow,
+      height: html.style.height,
+      position: html.style.position,
+      width: html.style.width,
+    };
+    const prevBody = {
+      overflow: body.style.overflow,
+      height: body.style.height,
+      position: body.style.position,
+      width: body.style.width,
+    };
+
+    html.style.overflow = 'hidden';
+    body.style.overflow = 'hidden';
+    html.style.height = '100%';
+    body.style.height = '100%';
+    html.style.position = 'fixed';
+    body.style.position = 'fixed';
+    html.style.width = '100%';
+    body.style.width = '100%';
+
+    return () => {
+      html.style.overflow = prevHtml.overflow;
+      html.style.height = prevHtml.height;
+      html.style.position = prevHtml.position;
+      html.style.width = prevHtml.width;
+      body.style.overflow = prevBody.overflow;
+      body.style.height = prevBody.height;
+      body.style.position = prevBody.position;
+      body.style.width = prevBody.width;
+    };
+  }, []);
 
   // Define base style properties shared across modes/breakpoints
   const live2dBaseStyle = {

@@ -35,7 +35,8 @@ export function usePetOverlayBridge() {
     [messages],
   );
 
-  const handleOverlaySendText = useCallback(async (rawText: string) => {
+  const handleOverlaySendText = useCallback(async (payload: { text?: string; timestamp?: number } | string) => {
+    const rawText = typeof payload === 'string' ? payload : payload?.text ?? '';
     const text = rawText.trim();
     if (!text) return;
 
@@ -87,8 +88,8 @@ export function usePetOverlayBridge() {
     if (!isElectron || isOverlay) return;
 
     const cleanups: Array<() => void> = [];
-    const offSendText = window.api?.onPetOverlaySendText?.((text) => {
-      void handleOverlaySendText(text);
+    const offSendText = window.api?.onPetOverlaySendText?.((payload) => {
+      void handleOverlaySendText(payload);
     });
     if (typeof offSendText === 'function') cleanups.push(offSendText);
 

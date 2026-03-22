@@ -22,11 +22,25 @@ export function initializeLive2D(): void {
   );
   console.log("Model directories:", LAppDefine.ModelDir);
 
-  // Clean up any existing instances first
-  if (LAppDelegate.getInstance()) {
-    // Release existing model resources
-    LAppLive2DManager.releaseInstance();
+  const canvasElement = document.getElementById('canvas');
+  if (!canvasElement) {
+    // Canvas may not be mounted yet when model info arrives very early.
+    setTimeout(() => {
+      const retryCanvas = document.getElementById('canvas');
+      if (!retryCanvas) {
+        console.error('Live2D initialization skipped: canvas element not found.');
+        return;
+      }
+      initializeLive2D();
+    }, 120);
+    return;
   }
+
+  // Clean up any existing instances first.
+  // Repeated initialize without full delegate release can spawn multiple RAF loops.
+  LAppDelegate.releaseInstance();
+  LAppLive2DManager.releaseInstance();
+  LAppGlManager.releaseInstance();
 
   if (
     !LAppGlManager.getInstance() ||

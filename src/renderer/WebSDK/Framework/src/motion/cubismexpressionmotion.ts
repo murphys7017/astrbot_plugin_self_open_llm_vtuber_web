@@ -5,7 +5,7 @@
  * that can be found at https://www.live2d.com/eula/live2d-open-software-license-agreement_en.html.
  */
 
-import { CubismIdHandle } from '../id/cubismid';
+import { CubismId, CubismIdHandle } from '../id/cubismid';
 import { CubismFramework } from '../live2dcubismframework';
 import { CubismModel } from '../model/cubismmodel';
 import { csmVector } from '../type/csmvector';
@@ -45,7 +45,11 @@ export class CubismExpressionMotion extends ACubismMotion {
     size: number
   ): CubismExpressionMotion {
     const expression: CubismExpressionMotion = new CubismExpressionMotion();
-    expression.parse(buffer, size);
+    try {
+      expression.parse(buffer, size);
+    } catch (error) {
+      console.error('[CubismExpressionMotion] Failed to parse expression motion:', error);
+    }
     return expression;
   }
 
@@ -269,39 +273,46 @@ export class CubismExpressionMotion extends ACubismMotion {
     ); // フェードアウト
 
     // 各パラメータについて
-    const parameterCount = root
-      .getValueByString(ExpressionKeyParameters)
-      .getSize();
+    const parameters = root.getValueByString(ExpressionKeyParameters);
+    const parameterCount = parameters && !parameters.isNull() ? parameters.getSize() : 0;
     this._parameters.prepareCapacity(parameterCount);
 
     for (let i = 0; i < parameterCount; ++i) {
-      const param: Value = root
-        .getValueByString(ExpressionKeyParameters)
-        .getValueByIndex(i);
-      const parameterId: CubismIdHandle = CubismFramework.getIdManager().getId(
-        param.getValueByString(ExpressionKeyId).getRawString()
-      ); // パラメータID
+      const param: Value = parameters.getValueByIndex(i);
+      if (!param || param.isNull()) {
+        continue;
+      }
 
-      const value: number = param
-        .getValueByString(ExpressionKeyValue)
-        .toFloat(); // 値
+      const idNode = param.getValueByString(ExpressionKeyId);
+      const rawParameterId = idNode?.getRawString?.();
+      if (!rawParameterId) {
+        continue;
+      }
+
+      const idManager = CubismFramework.getIdManager();
+      const parameterId: CubismIdHandle = idManager
+        ? idManager.getId(rawParameterId)
+        : CubismId.createIdInternal(rawParameterId); // パラメータID
+
+      const valueNode = param.getValueByString(ExpressionKeyValue);
+      const value: number = valueNode?.toFloat ? valueNode.toFloat(0.0) : 0.0; // 値
 
       // 計算方法の設定
       let blendType: ExpressionBlendType;
+      const blendNode = param.getValueByString(ExpressionKeyBlend);
+      const blendString = blendNode && !blendNode.isNull() ? blendNode.getString() : BlendValueAdd;
 
       if (
-        param.getValueByString(ExpressionKeyBlend).isNull() ||
-        param.getValueByString(ExpressionKeyBlend).getString() == BlendValueAdd
+        !blendString ||
+        blendString == BlendValueAdd
       ) {
         blendType = ExpressionBlendType.Additive;
       } else if (
-        param.getValueByString(ExpressionKeyBlend).getString() ==
-        BlendValueMultiply
+        blendString == BlendValueMultiply
       ) {
         blendType = ExpressionBlendType.Multiply;
       } else if (
-        param.getValueByString(ExpressionKeyBlend).getString() ==
-        BlendValueOverwrite
+        blendString == BlendValueOverwrite
       ) {
         blendType = ExpressionBlendType.Overwrite;
       } else {

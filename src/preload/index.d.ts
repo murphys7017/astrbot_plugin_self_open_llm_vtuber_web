@@ -17,12 +17,12 @@ declare global {
       movePetWindowDrag: (screenX: number, screenY: number) => void
       endPetWindowDrag: () => void
       setPetInputFocus: (focused: boolean) => void
-      sendPetOverlayText: (text: string) => void
+      sendPetOverlayText: (payload: { text: string; timestamp?: number } | string) => void
       sendPetOverlayMicToggle: () => void
       sendPetOverlayInterrupt: () => void
       sendPetOverlayState: (state: { aiState: string; lastAIMessage: string; micOn: boolean }) => void
       onPetOverlayState: (callback: (state: { aiState: string; lastAIMessage: string; micOn: boolean }) => void) => () => void
-      onPetOverlaySendText: (callback: (text: string) => void) => () => void
+      onPetOverlaySendText: (callback: (payload: { text: string; timestamp?: number } | string) => void) => () => void
       onPetOverlayMicToggle: (callback: () => void) => () => void
       onPetOverlayInterrupt: (callback: () => void) => () => void
       setPetOverlayPreferredHeight: (height: number) => void

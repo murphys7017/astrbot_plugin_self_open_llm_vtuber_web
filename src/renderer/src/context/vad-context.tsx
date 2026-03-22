@@ -327,7 +327,6 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
    */
   const setPreviousTriggeredProbability = useCallback((value: number) => {
     previousTriggeredProbabilityRef.current = value;
-    forceUpdate();
   }, []);
 
   /**
