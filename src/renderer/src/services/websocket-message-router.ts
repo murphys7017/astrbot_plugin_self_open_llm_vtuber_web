@@ -7,6 +7,35 @@ import {
   markFrontendTranscriptionReceived,
 } from '@/utils/timing-debug';
 
+const inlineAnimTagPattern = /<@anim\s*\{[\s\S]*?\}>\s*/gi;
+const legacyExpressionTagPattern = /<~[^~]*~>\s*/gi;
+
+export const sanitizeDisplayTextValue = (text: string) => {
+  return text
+    .replace(inlineAnimTagPattern, '')
+    .replace(legacyExpressionTagPattern, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+};
+
+export const sanitizeDisplayTextPayload = <T extends { text: string } | null | undefined>(
+  payload: T,
+): T => {
+  if (!payload || typeof payload.text !== 'string') {
+    return payload;
+  }
+
+  const sanitizedText = sanitizeDisplayTextValue(payload.text);
+  if (sanitizedText === payload.text) {
+    return payload;
+  }
+
+  return {
+    ...payload,
+    text: sanitizedText,
+  };
+};
+
 export const normalizeModelInfo = (modelInfo: any, baseUrl: string) => {
   if (!modelInfo) {
     return modelInfo;
@@ -196,9 +225,13 @@ export const createWebSocketMessageHandler = ({
           hasAudioUrl: Boolean(message.audio_url),
         });
         if (aiState !== 'interrupted' && aiState !== 'listening') {
+          const sanitizedDisplayText = sanitizeDisplayTextPayload(message.display_text || null);
+          const normalizedDisplayText = sanitizedDisplayText?.text
+            ? sanitizedDisplayText
+            : null;
           addAudioTask({
             audioUrl: message.audio_url || '',
-            displayText: message.display_text || null,
+            displayText: normalizedDisplayText,
             expressions: message.actions?.expressions || null,
             motions: message.actions?.motions || null,
             expressionDecision: message.actions?.expression_decision || null,

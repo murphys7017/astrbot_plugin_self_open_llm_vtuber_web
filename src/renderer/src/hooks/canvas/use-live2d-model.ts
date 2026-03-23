@@ -476,20 +476,24 @@ export const useLive2DModel = ({
         const motionGroups = [];
         const setting = model._modelSetting;
         if (setting) {
-          // Get all motion groups
-          const groups = setting._json?.FileReferences?.Motions;
-          if (groups) {
-            for (const groupName in groups) {
-              const motions = groups[groupName];
-              motionGroups.push({
-                name: groupName,
-                count: motions.length,
-                motions: motions.map((motion: any, index: number) => ({
-                  index,
-                  file: motion.File
-                }))
+          const groupCount = setting.getMotionGroupCount?.() ?? 0;
+          for (let groupIndex = 0; groupIndex < groupCount; groupIndex += 1) {
+            const groupName = setting.getMotionGroupName(groupIndex);
+            const motionCount = setting.getMotionCount(groupName);
+            const motions = [];
+
+            for (let motionIndex = 0; motionIndex < motionCount; motionIndex += 1) {
+              motions.push({
+                index: motionIndex,
+                file: setting.getMotionFileName(groupName, motionIndex),
               });
             }
+
+            motionGroups.push({
+              name: groupName,
+              count: motionCount,
+              motions,
+            });
           }
         }
         

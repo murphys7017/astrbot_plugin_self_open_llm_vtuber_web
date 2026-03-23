@@ -17,8 +17,8 @@ import * as LAppDefine from '../../../WebSDK/src/lappdefine';
 import {
   AudioPlaybackRuntimeDeps,
   ExpressionDecisionPayload,
-  findMappedExpression as findMappedExpressionHelper,
-  findModelExpressionMatch as findModelExpressionMatchHelper,
+  getDirectMotionCandidates,
+  getExpressionDecisionMotionCandidates,
   playResolvedMotion as playResolvedMotionHelper,
   resolvePlaybackExpression as resolvePlaybackExpressionHelper,
   resolvePlaybackMotion as resolvePlaybackMotionHelper,
@@ -43,7 +43,7 @@ export const useAudioTask = () => {
   const { setSubtitleText } = useSubtitle();
   const { appendResponse, appendAIMessage, fullResponse } = useChatHistory();
   const { sendMessage } = useWebSocket();
-  const { modelInfo } = useLive2DConfig();
+  const { modelInfo, motionCatalogMap } = useLive2DConfig();
   const { setExpression, setExpressionWithRetry, resetExpression } = useLive2DExpression();
   const expressionOnlyHoldMs = 900;
 
@@ -85,17 +85,6 @@ export const useAudioTask = () => {
     setSubtitleText('');
   }, [resetModelExpression, setSubtitleText]);
 
-  const findMappedExpression = useCallback((key?: string): string | number | null => {
-    return findMappedExpressionHelper(modelInfo?.emotionMap, key);
-  }, [modelInfo?.emotionMap]);
-
-  const findModelExpressionMatch = useCallback((
-    candidate: string | number | null | undefined,
-    lappAdapter: any,
-  ): string | number | null => {
-    return findModelExpressionMatchHelper(candidate, lappAdapter);
-  }, []);
-
   const resolvePlaybackExpression = useCallback((
     expressions?: string[] | number[] | null,
     expressionDecision?: ExpressionDecisionPayload | null,
@@ -115,8 +104,8 @@ export const useAudioTask = () => {
     modelInfo?.emotionMap,
   ]);
 
-  const resolvePlaybackMotion = useCallback((model: any, motions?: string[] | null) => {
-    return resolvePlaybackMotionHelper(model, motions);
+  const resolvePlaybackMotion = useCallback((model: any, motionCandidates?: string[] | null) => {
+    return resolvePlaybackMotionHelper(model, motionCandidates);
   }, []);
 
   const playResolvedMotion = useCallback((model: any, motion: {
@@ -160,16 +149,37 @@ export const useAudioTask = () => {
     });
 
     const lappAdapter = (window as any).getLAppAdapter?.();
-    const resolvedStandaloneMotion = resolvePlaybackMotion(
-      lappAdapter?.getModel?.(),
-      motions,
-    );
-    const expressionValue = resolvePlaybackExpression(
-      expressions,
-      expressionDecision,
-      lappAdapter,
-      { preferMotion: Boolean(resolvedStandaloneMotion) },
-    );
+    const directMotionCandidates = getDirectMotionCandidates(motions);
+    const decisionMotionCandidates = directMotionCandidates.length === 0
+      ? getExpressionDecisionMotionCandidates(
+        expressionDecision,
+        {
+          ...modelInfo?.motionMap,
+          ...motionCatalogMap,
+        },
+      )
+      : [];
+    const motionCandidates = directMotionCandidates.length > 0
+      ? directMotionCandidates
+      : decisionMotionCandidates;
+
+    const resolveExpressionValue = (
+      resolvedMotion: { groupName: string; motionIndex: number } | null,
+      adapterInstance: any,
+    ) => {
+      const hasDirectMotions = directMotionCandidates.length > 0;
+      const hasDecisionMotionFallback = decisionMotionCandidates.length > 0;
+      const shouldSkipExpressionDecision = hasDirectMotions;
+      const shouldSuppressExpressions = hasDirectMotions
+        || (hasDecisionMotionFallback && Boolean(resolvedMotion));
+
+      return resolvePlaybackExpression(
+        shouldSuppressExpressions ? null : expressions,
+        shouldSkipExpressionDecision ? null : expressionDecision,
+        adapterInstance,
+        { preferMotion: shouldSuppressExpressions || Boolean(resolvedMotion) },
+      );
+    };
 
     // Update display text
     if (displayText) {
@@ -183,32 +193,46 @@ export const useAudioTask = () => {
     try {
       if (!lappAdapter) {
         console.warn('[AudioTask] LAppAdapter not found for expression handling');
-      } else if (!audioUrl && expressionValue !== null) {
-        try {
-          if (resolvedStandaloneMotion) {
-            playResolvedMotion(lappAdapter?.getModel?.(), resolvedStandaloneMotion);
-          }
-
-          const applied = await setExpressionWithRetry(
-            expressionValue,
-            lappAdapter,
-            `Set expression to: ${expressionValue}`,
-          );
-
-          if (applied) {
-            await new Promise((resolve) => {
-              window.setTimeout(resolve, expressionOnlyHoldMs);
-            });
-
-            if (stateRef.current.aiState !== 'interrupted') {
-              resetModelExpression();
-            }
-          }
-        } catch (err) {
-          console.error('[AudioTask] Failed to set expression:', err);
+      } else if (!audioUrl) {
+        const resolvedStandaloneMotion = resolvePlaybackMotion(
+          lappAdapter?.getModel?.(),
+          motionCandidates,
+        );
+        if (directMotionCandidates.length > 0 && !resolvedStandaloneMotion) {
+          console.error('[AudioTask] Failed to resolve backend actions.motions:', directMotionCandidates);
         }
-      } else if (!audioUrl && resolvedStandaloneMotion) {
-        playResolvedMotion(lappAdapter.getModel?.(), resolvedStandaloneMotion);
+        const standaloneExpressionValue = resolveExpressionValue(
+          resolvedStandaloneMotion,
+          lappAdapter,
+        );
+
+        if (standaloneExpressionValue !== null) {
+          try {
+            if (resolvedStandaloneMotion) {
+              playResolvedMotion(lappAdapter?.getModel?.(), resolvedStandaloneMotion);
+            }
+
+            const applied = await setExpressionWithRetry(
+              standaloneExpressionValue,
+              lappAdapter,
+              `Set expression to: ${standaloneExpressionValue}`,
+            );
+
+            if (applied) {
+              await new Promise((resolve) => {
+                window.setTimeout(resolve, expressionOnlyHoldMs);
+              });
+
+              if (stateRef.current.aiState !== 'interrupted') {
+                resetModelExpression();
+              }
+            }
+          } catch (err) {
+            console.error('[AudioTask] Failed to set expression:', err);
+          }
+        } else if (resolvedStandaloneMotion) {
+          playResolvedMotion(lappAdapter.getModel?.(), resolvedStandaloneMotion);
+        }
       }
 
       // Process audio if available
@@ -225,7 +249,11 @@ export const useAudioTask = () => {
           return;
         }
 
-        const resolvedMotion = resolvePlaybackMotion(model, motions);
+        const resolvedMotion = resolvePlaybackMotion(model, motionCandidates);
+        if (directMotionCandidates.length > 0 && !resolvedMotion) {
+          console.error('[AudioTask] Failed to resolve backend actions.motions:', directMotionCandidates);
+        }
+        const expressionValue = resolveExpressionValue(resolvedMotion, lappAdapter);
         const playbackDeps: AudioPlaybackRuntimeDeps = {
           audioManager,
           sendMessage,

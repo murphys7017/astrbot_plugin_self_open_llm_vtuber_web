@@ -48,6 +48,18 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
   const autoStartMicOnConvEndRef = useRef(autoStartMicOnConvEnd);
   const { interrupt } = useInterrupt();
   const { setBrowserViewData } = useBrowser();
+  const sendMessage = useCallback((message: object) => {
+    wsService.sendMessage(message);
+  }, []);
+
+  const handleControlMessage = useCallback(createControlMessageHandler({
+    startMic,
+    stopMic,
+    stopCurrentAudioAndLipSync,
+    setAiState,
+    clearResponse,
+    autoStartMicOnConvEndRef,
+  }), [clearResponse, setAiState, startMic, stopCurrentAudioAndLipSync, stopMic]);
 
   // 【P0 修复】分离高频动态状态到 ref，避免重新创建 handleWebSocketMessage
   const dynamicStateRef = useRef({
@@ -56,6 +68,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
     currentHistoryUid,
     t,
     interrupt,
+    handleControlMessage,
     addAudioTask,
     appendHumanMessage,
     appendOrUpdateToolCallMessage,
@@ -71,7 +84,8 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
     setSubtitleText,
     setForceNewMessage,
     setBrowserViewData,
-    bgUrlContextSetBgFiles: bgUrlContext?.setBackgroundFiles,
+    setBackgroundFiles: bgUrlContext?.setBackgroundFiles,
+    sendMessage,
   });
 
   // 同步动态状态到 ref（但不触发 useCallback 重建）
@@ -82,6 +96,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
       currentHistoryUid,
       t,
       interrupt,
+      handleControlMessage,
       addAudioTask,
       appendHumanMessage,
       appendOrUpdateToolCallMessage,
@@ -97,28 +112,21 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
       setSubtitleText,
       setForceNewMessage,
       setBrowserViewData,
-      bgUrlContextSetBgFiles: bgUrlContext?.setBackgroundFiles,
+      setBackgroundFiles: bgUrlContext?.setBackgroundFiles,
+      sendMessage,
     };
   }, [
     aiState, baseUrl, currentHistoryUid, t, interrupt, addAudioTask,
+    handleControlMessage,
     appendHumanMessage, appendOrUpdateToolCallMessage, setAiState,
     setBackendSynthComplete, setModelInfo, setConfName, setConfUid,
     setConfigFiles, setCurrentHistoryUid, setHistoryList, setMessages,
-    setSubtitleText, setForceNewMessage, setBrowserViewData, bgUrlContext,
+    setSubtitleText, setForceNewMessage, setBrowserViewData, bgUrlContext, sendMessage,
   ]);
 
   useEffect(() => {
     autoStartMicOnConvEndRef.current = autoStartMicOnConvEnd;
   }, [autoStartMicOnConvEnd]);
-
-  const handleControlMessage = useCallback(createControlMessageHandler({
-    startMic,
-    stopMic,
-    stopCurrentAudioAndLipSync,
-    setAiState,
-    clearResponse,
-    autoStartMicOnConvEndRef,
-  }), [clearResponse, setAiState, startMic, stopCurrentAudioAndLipSync, stopMic]);
 
   // 【P0 修复】创建稳定的 handleWebSocketMessage：仅依赖于真正稳定的参数
   const handleWebSocketMessage = useCallback((messageData: any) => {

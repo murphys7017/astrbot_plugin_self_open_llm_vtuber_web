@@ -6,6 +6,7 @@
  */
 
 import { CubismIdHandle } from '../id/cubismid';
+import { CubismId } from '../id/cubismid';
 import { CubismFramework } from '../live2dcubismframework';
 import { CubismVector2 } from '../math/cubismvector2';
 import { CubismJson } from '../utils/cubismjson';
@@ -59,6 +60,11 @@ const Acceleration = 'Acceleration';
  * physics3.jsonのコンテナ。
  */
 export class CubismPhysicsJson {
+  private resolveIdHandle(id: string): CubismIdHandle {
+    const idManager = CubismFramework.getIdManager();
+    return idManager ? idManager.getId(id) : CubismId.createIdInternal(id);
+  }
+
   /**
    * コンストラクタ
    * @param buffer physics3.jsonが読み込まれているバッファ
@@ -371,7 +377,7 @@ export class CubismPhysicsJson {
     physicsSettingIndex: number,
     inputIndex: number
   ): CubismIdHandle {
-    return CubismFramework.getIdManager().getId(
+    return this.resolveIdHandle(
       this._json
         .getRoot()
         .getValueByString(PhysicsSettings)
@@ -469,7 +475,7 @@ export class CubismPhysicsJson {
     physicsSettingIndex: number,
     outputIndex: number
   ): CubismIdHandle {
-    return CubismFramework.getIdManager().getId(
+    return this.resolveIdHandle(
       this._json
         .getRoot()
         .getValueByString(PhysicsSettings)

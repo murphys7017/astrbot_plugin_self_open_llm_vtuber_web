@@ -49,6 +49,9 @@ export interface Actions {
     semantic_expression?: string;
     base_expression?: string;
     reason?: string;
+    motion_id?: string;
+    requested_motion_id?: string;
+    motion_source?: string;
   };
   pictures?: string[];
   sounds?: string[];

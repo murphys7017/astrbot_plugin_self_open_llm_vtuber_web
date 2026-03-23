@@ -264,12 +264,14 @@ export class CubismExpressionMotion extends ACubismMotion {
     }
 
     const root: Value = json.getRoot();
+    const fadeInNode = root?.getValueByString?.(ExpressionKeyFadeIn);
+    const fadeOutNode = root?.getValueByString?.(ExpressionKeyFadeOut);
 
     this.setFadeInTime(
-      root.getValueByString(ExpressionKeyFadeIn).toFloat(DefaultFadeTime)
+      fadeInNode?.toFloat ? fadeInNode.toFloat(DefaultFadeTime) : DefaultFadeTime
     ); // フェードイン
     this.setFadeOutTime(
-      root.getValueByString(ExpressionKeyFadeOut).toFloat(DefaultFadeTime)
+      fadeOutNode?.toFloat ? fadeOutNode.toFloat(DefaultFadeTime) : DefaultFadeTime
     ); // フェードアウト
 
     // 各パラメータについて

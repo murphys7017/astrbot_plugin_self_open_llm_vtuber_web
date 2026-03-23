@@ -935,6 +935,7 @@ export class LAppModel extends CubismUserModel {
           if (!arrayBuffer) {
             // If buffer is null, reduce motion count and return
             this._allMotionCount--;
+            this.completeMotionLoadingIfReady();
             return;
           }
 
@@ -966,30 +967,45 @@ export class LAppModel extends CubismUserModel {
             this._motions.setValue(name, tmpMotion);
 
             this._motionCount++;
-            if (this._motionCount >= this._allMotionCount) {
-              this._state = LoadStep.LoadTexture;
-
-              // 全てのモーションを停止する
-              this._motionManager.stopAllMotions();
-
-              this._updating = false;
-              this._initialized = true;
-
-              this.createRenderer();
-              this.setupTextures();
-              this.getRenderer().startUp(gl);
-            }
+            this.completeMotionLoadingIfReady();
           } else {
             // loadMotionできなかった場合はモーションの総数がずれるので1つ減らす
             this._allMotionCount--;
+            this.completeMotionLoadingIfReady();
           }
         })
         .catch((error) => {
           // Add error handling
           CubismLogError(`Failed to load motion: ${error}`);
           this._allMotionCount--;
+          this.completeMotionLoadingIfReady();
         });
     }
+  }
+
+  private completeMotionLoadingIfReady(): void {
+    if (
+      this._state !== LoadStep.WaitLoadMotion
+      && this._state !== LoadStep.LoadMotion
+    ) {
+      return;
+    }
+
+    if (this._motionCount < this._allMotionCount) {
+      return;
+    }
+
+    this._state = LoadStep.LoadTexture;
+
+    // 全てのモーションを停止する
+    this._motionManager.stopAllMotions();
+
+    this._updating = false;
+    this._initialized = true;
+
+    this.createRenderer();
+    this.setupTextures();
+    this.getRenderer().startUp(gl);
   }
 
   /**

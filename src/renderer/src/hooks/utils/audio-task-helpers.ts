@@ -30,7 +30,12 @@ export interface ExpressionDecisionPayload {
   semantic_expression?: string
   base_expression?: string
   reason?: string
+  motion_id?: string
+  requested_motion_id?: string
+  motion_source?: string
 }
+
+type MotionAssetMap = Record<string, string | string[]>;
 
 const semanticExpressionFallbacks: Record<string, string[]> = {
   neutral: ['Neutral'],
@@ -224,44 +229,171 @@ export const resolvePlaybackExpression = ({
     ?? findSemanticFallbackExpression(semanticExpression, lappAdapter, emotionMap);
 };
 
-export const resolvePlaybackMotion = (model: any, motions?: string[] | null) => {
-  const motionCandidate = motions?.[0]?.trim();
-  const motionGroups = model?._modelSetting?._json?.FileReferences?.Motions;
-  if (!motionCandidate || !motionGroups) {
-    return null;
+export const normalizeMotionPath = (value?: string) => {
+  if (typeof value !== 'string') {
+    return '';
   }
 
-  const normalizeMotionPath = (value?: string) => value
-    ?.replace(/\\/g, '/')
+  let normalized = value
+    .replace(/\\/g, '/')
+    .split('?')[0]
     .replace(/^\.?\//, '')
-    .trim()
-    .toLowerCase() ?? '';
+    .trim();
 
-  const candidatePath = normalizeMotionPath(motionCandidate);
-  const candidateFileName = candidatePath.split('/').pop() ?? candidatePath;
+  if (!normalized) {
+    return '';
+  }
 
-  for (const [groupName, groupMotions] of Object.entries(motionGroups)) {
-    if (!Array.isArray(groupMotions)) {
+  try {
+    normalized = decodeURIComponent(normalized);
+  } catch {
+    // Keep the raw value if it's not URI-encoded.
+  }
+
+  return normalized.toLowerCase();
+};
+
+const normalizeMotionAssets = (value: unknown): string[] => {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed ? [trimmed] : [];
+  }
+
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
+
+const dedupeMotionCandidates = (candidates: string[]) => {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeMotionPath(candidate);
+    if (!normalized || seen.has(normalized)) {
       continue;
     }
 
-    for (const [index, motion] of groupMotions.entries()) {
-      const motionFile = typeof motion?.File === 'string' ? motion.File : '';
-      if (!motionFile) {
+    seen.add(normalized);
+    result.push(candidate.trim());
+  }
+
+  return result;
+};
+
+const findMappedMotionAssets = (
+  motionMap: MotionAssetMap | undefined,
+  key?: string,
+) => {
+  const normalizedKey = normalizeExpressionValue(key);
+  if (!normalizedKey || !motionMap) {
+    return [];
+  }
+
+  for (const [mapKey, mapValue] of Object.entries(motionMap)) {
+    if (normalizeExpressionValue(mapKey) === normalizedKey) {
+      return normalizeMotionAssets(mapValue);
+    }
+  }
+
+  return [];
+};
+
+export const getDirectMotionCandidates = (motions?: string[] | null) => {
+  return dedupeMotionCandidates(normalizeMotionAssets(motions));
+};
+
+export const getExpressionDecisionMotionCandidates = (
+  expressionDecision?: ExpressionDecisionPayload | null,
+  motionMap?: MotionAssetMap,
+) => {
+  const decisionCandidates = [
+    expressionDecision?.motion_id,
+    expressionDecision?.requested_motion_id,
+    expressionDecision?.base_expression,
+    expressionDecision?.semantic_expression,
+  ].filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+
+  if (!decisionCandidates.length) {
+    return [];
+  }
+
+  const resolvedCandidates: string[] = [];
+  for (const decisionCandidate of decisionCandidates) {
+    const mappedAssets = findMappedMotionAssets(motionMap, decisionCandidate);
+    if (mappedAssets.length > 0) {
+      resolvedCandidates.push(...mappedAssets);
+    }
+    resolvedCandidates.push(decisionCandidate);
+  }
+
+  return dedupeMotionCandidates(resolvedCandidates);
+};
+
+export const resolvePlaybackMotion = (model: any, motionCandidates?: string[] | null) => {
+  const candidates = getDirectMotionCandidates(motionCandidates);
+  const modelSetting = model?._modelSetting;
+  const motionGroupCount = modelSetting?.getMotionGroupCount?.() ?? 0;
+  if (!candidates.length || motionGroupCount <= 0) {
+    return null;
+  }
+
+  for (const motionCandidate of candidates) {
+    const candidatePath = normalizeMotionPath(motionCandidate);
+    if (!candidatePath) {
+      continue;
+    }
+
+    const candidateFileName = candidatePath.split('/').pop() ?? candidatePath;
+    const candidateFileStem = candidateFileName.replace(/\.motion3\.json$/i, '');
+
+    for (let groupIndex = 0; groupIndex < motionGroupCount; groupIndex += 1) {
+      const groupName = modelSetting.getMotionGroupName(groupIndex);
+      if (typeof groupName !== 'string') {
         continue;
       }
 
-      const normalizedMotionFile = normalizeMotionPath(motionFile);
-      const motionFileName = normalizedMotionFile.split('/').pop() ?? normalizedMotionFile;
-
+      const normalizedGroupName = normalizeExpressionValue(groupName);
       if (
-        normalizedMotionFile === candidatePath
-        || motionFileName === candidateFileName
+        normalizedGroupName
+        && (
+          normalizedGroupName === candidatePath
+          || normalizedGroupName === candidateFileName
+          || normalizedGroupName === candidateFileStem
+        )
       ) {
         return {
           groupName,
-          motionIndex: index,
+          motionIndex: 0,
         };
+      }
+
+      const groupMotionCount = modelSetting.getMotionCount(groupName);
+      for (let motionIndex = 0; motionIndex < groupMotionCount; motionIndex += 1) {
+        const motionFile = modelSetting.getMotionFileName(groupName, motionIndex);
+        if (!motionFile) {
+          continue;
+        }
+
+        const normalizedMotionFile = normalizeMotionPath(motionFile);
+        const motionFileName = normalizedMotionFile.split('/').pop() ?? normalizedMotionFile;
+        const motionFileStem = motionFileName.replace(/\.motion3\.json$/i, '');
+
+        if (
+          normalizedMotionFile === candidatePath
+          || motionFileName === candidateFileName
+          || motionFileStem === candidateFileStem
+        ) {
+          return {
+            groupName,
+            motionIndex,
+          };
+        }
       }
     }
   }
