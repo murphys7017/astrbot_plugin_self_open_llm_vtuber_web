@@ -94,51 +94,39 @@ export class CubismModelSettingJson extends ICubismModelSetting {
 
     if (this.getJson()) {
       this._jsonValue = new csmVector<Value>();
+      const root = this.getJson().getRoot();
+      const fileReferences = root?.getValueByString(FileReferences);
 
       // 順番はenum FrequestNodeと一致させる
       this._jsonValue.pushBack(
-        this.getJson().getRoot().getValueByString(Groups)
+        root?.getValueByString(Groups)
       );
       this._jsonValue.pushBack(
-        this.getJson()
-          .getRoot()
-          .getValueByString(FileReferences)
-          .getValueByString(Moc)
+        fileReferences?.getValueByString(Moc)
       );
       this._jsonValue.pushBack(
-        this.getJson()
-          .getRoot()
-          .getValueByString(FileReferences)
-          .getValueByString(Motions)
+        fileReferences?.getValueByString(Motions)
       );
       this._jsonValue.pushBack(
-        this.getJson()
-          .getRoot()
-          .getValueByString(FileReferences)
-          .getValueByString(Expressions)
+        fileReferences?.getValueByString(Expressions)
       );
       this._jsonValue.pushBack(
-        this.getJson()
-          .getRoot()
-          .getValueByString(FileReferences)
-          .getValueByString(Textures)
+        fileReferences?.getValueByString(Textures)
       );
       this._jsonValue.pushBack(
-        this.getJson()
-          .getRoot()
-          .getValueByString(FileReferences)
-          .getValueByString(Physics)
+        fileReferences?.getValueByString(Physics)
       );
       this._jsonValue.pushBack(
-        this.getJson()
-          .getRoot()
-          .getValueByString(FileReferences)
-          .getValueByString(Pose)
+        fileReferences?.getValueByString(Pose)
       );
       this._jsonValue.pushBack(
-        this.getJson().getRoot().getValueByString(HitAreas)
+        root?.getValueByString(HitAreas)
       );
     }
+  }
+
+  private hasJsonValue(node: Value | null | undefined): boolean {
+    return Boolean(node) && !node.isNull() && !node.isError();
   }
 
   /**
@@ -623,8 +611,8 @@ export class CubismModelSettingJson extends ICubismModelSetting {
    * @return false キーが存在しない
    */
   private isExistModelFile(): boolean {
-    const node: Value = this._jsonValue.at(FrequestNode.FrequestNode_Moc);
-    return !node.isNull() && !node.isError();
+    const node = this._jsonValue.at(FrequestNode.FrequestNode_Moc);
+    return this.hasJsonValue(node);
   }
 
   /**
@@ -633,8 +621,8 @@ export class CubismModelSettingJson extends ICubismModelSetting {
    * @return false キーが存在しない
    */
   private isExistTextureFiles(): boolean {
-    const node: Value = this._jsonValue.at(FrequestNode.FrequestNode_Textures);
-    return !node.isNull() && !node.isError();
+    const node = this._jsonValue.at(FrequestNode.FrequestNode_Textures);
+    return this.hasJsonValue(node);
   }
 
   /**
@@ -643,8 +631,8 @@ export class CubismModelSettingJson extends ICubismModelSetting {
    * @return false キーが存在しない
    */
   private isExistHitAreas(): boolean {
-    const node: Value = this._jsonValue.at(FrequestNode.FrequestNode_HitAreas);
-    return !node.isNull() && !node.isError();
+    const node = this._jsonValue.at(FrequestNode.FrequestNode_HitAreas);
+    return this.hasJsonValue(node);
   }
 
   /**
@@ -653,8 +641,8 @@ export class CubismModelSettingJson extends ICubismModelSetting {
    * @return false キーが存在しない
    */
   private isExistPhysicsFile(): boolean {
-    const node: Value = this._jsonValue.at(FrequestNode.FrequestNode_Physics);
-    return !node.isNull() && !node.isError();
+    const node = this._jsonValue.at(FrequestNode.FrequestNode_Physics);
+    return this.hasJsonValue(node);
   }
 
   /**
@@ -663,8 +651,8 @@ export class CubismModelSettingJson extends ICubismModelSetting {
    * @return false キーが存在しない
    */
   private isExistPoseFile(): boolean {
-    const node: Value = this._jsonValue.at(FrequestNode.FrequestNode_Pose);
-    return !node.isNull() && !node.isError();
+    const node = this._jsonValue.at(FrequestNode.FrequestNode_Pose);
+    return this.hasJsonValue(node);
   }
 
   /**
@@ -673,10 +661,8 @@ export class CubismModelSettingJson extends ICubismModelSetting {
    * @return false キーが存在しない
    */
   private isExistExpressionFile(): boolean {
-    const node: Value = this._jsonValue.at(
-      FrequestNode.FrequestNode_Expressions
-    );
-    return !node.isNull() && !node.isError();
+    const node = this._jsonValue.at(FrequestNode.FrequestNode_Expressions);
+    return this.hasJsonValue(node);
   }
 
   /**
@@ -685,8 +671,8 @@ export class CubismModelSettingJson extends ICubismModelSetting {
    * @return false キーが存在しない
    */
   private isExistMotionGroups(): boolean {
-    const node: Value = this._jsonValue.at(FrequestNode.FrequestNode_Motions);
-    return !node.isNull() && !node.isError();
+    const node = this._jsonValue.at(FrequestNode.FrequestNode_Motions);
+    return this.hasJsonValue(node);
   }
 
   /**

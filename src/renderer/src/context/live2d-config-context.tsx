@@ -1,5 +1,5 @@
 import {
-  createContext, useContext, useEffect, useState, useMemo,
+  createContext, useContext, useState, useMemo,
 } from 'react';
 import { useLocalStorage } from '@/hooks/utils/use-local-storage';
 
@@ -13,10 +13,6 @@ interface EmotionMap {
 
 interface MotionMap {
   [key: string]: string | string[];
-}
-
-export interface MotionCatalogMap {
-  [key: string]: string;
 }
 
 /**
@@ -89,7 +85,6 @@ export interface ModelInfo {
  */
 interface Live2DConfigState {
   modelInfo?: ModelInfo;
-  motionCatalogMap: MotionCatalogMap;
   setModelInfo: (info: ModelInfo | undefined) => void;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
@@ -102,78 +97,7 @@ const DEFAULT_CONFIG = {
   modelInfo: {
     scrollToResize: true,
   } as ModelInfo | undefined,
-  motionCatalogMap: {} as MotionCatalogMap,
   isLoading: false,
-};
-
-const parseMotionCatalogPayload = (payload: unknown): MotionCatalogMap => {
-  const entries = Array.isArray((payload as { motions?: unknown })?.motions)
-    ? (payload as { motions: unknown[] }).motions
-    : payload;
-  const result: MotionCatalogMap = {};
-
-  if (Array.isArray(entries)) {
-    for (const entry of entries) {
-      if (!entry || typeof entry !== 'object') {
-        continue;
-      }
-
-      const motionIdRaw = (entry as { motion_id?: unknown; id?: unknown; key?: unknown }).motion_id
-        ?? (entry as { id?: unknown }).id
-        ?? (entry as { key?: unknown }).key;
-      const motionFileRaw = (entry as { file?: unknown }).file;
-      const motionId = typeof motionIdRaw === 'string' ? motionIdRaw.trim().toLowerCase() : '';
-      const motionFile = typeof motionFileRaw === 'string' ? motionFileRaw.trim() : '';
-
-      if (motionId && motionFile) {
-        result[motionId] = motionFile;
-      }
-    }
-    return result;
-  }
-
-  if (!entries || typeof entries !== 'object') {
-    return result;
-  }
-
-  for (const [rawKey, rawValue] of Object.entries(entries)) {
-    const motionId = rawKey.trim().toLowerCase();
-    if (!motionId) {
-      continue;
-    }
-
-    if (typeof rawValue === 'string' && rawValue.trim()) {
-      result[motionId] = rawValue.trim();
-      continue;
-    }
-
-    const motionFile = typeof (rawValue as { file?: unknown })?.file === 'string'
-      ? (rawValue as { file: string }).file.trim()
-      : '';
-    if (motionFile) {
-      result[motionId] = motionFile;
-    }
-  }
-
-  return result;
-};
-
-const buildMotionCatalogUrls = (modelUrl?: string) => {
-  if (!modelUrl) {
-    return [];
-  }
-
-  const trimmedUrl = modelUrl.trim();
-  const lastSlashIndex = trimmedUrl.lastIndexOf('/');
-  if (lastSlashIndex < 0) {
-    return [];
-  }
-
-  const modelBaseUrl = trimmedUrl.slice(0, lastSlashIndex + 1);
-  return [
-    `${modelBaseUrl}motion_catalog.json`,
-    `${modelBaseUrl}motion-catalog.json`,
-  ];
 };
 
 /**
@@ -188,9 +112,6 @@ export const Live2DConfigContext = createContext<Live2DConfigState | null>(null)
  */
 export function Live2DConfigProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(DEFAULT_CONFIG.isLoading);
-  const [motionCatalogMap, setMotionCatalogMap] = useState<MotionCatalogMap>(
-    DEFAULT_CONFIG.motionCatalogMap,
-  );
 
   const [modelInfo, setModelInfoState] = useLocalStorage<ModelInfo | undefined>(
     "modelInfo",
@@ -205,7 +126,6 @@ export function Live2DConfigProvider({ children }: { children: React.ReactNode }
   const setModelInfo = (info: ModelInfo | undefined) => {
     if (!info?.url) {
       setModelInfoState(undefined);
-      setMotionCatalogMap({});
       return;
     }
 
@@ -225,62 +145,14 @@ export function Live2DConfigProvider({ children }: { children: React.ReactNode }
     });
   };
 
-  useEffect(() => {
-    const candidateUrls = buildMotionCatalogUrls(modelInfo?.url);
-    if (!candidateUrls.length) {
-      setMotionCatalogMap({});
-      return undefined;
-    }
-
-    const abortController = new AbortController();
-    let isDisposed = false;
-
-    const loadMotionCatalog = async () => {
-      for (const candidateUrl of candidateUrls) {
-        try {
-          const response = await fetch(candidateUrl, {
-            signal: abortController.signal,
-          });
-          if (!response.ok) {
-            continue;
-          }
-
-          const payload = await response.json();
-          if (isDisposed) {
-            return;
-          }
-
-          setMotionCatalogMap(parseMotionCatalogPayload(payload));
-          return;
-        } catch (error) {
-          if ((error as { name?: string })?.name === 'AbortError') {
-            return;
-          }
-        }
-      }
-
-      if (!isDisposed) {
-        setMotionCatalogMap({});
-      }
-    };
-
-    void loadMotionCatalog();
-
-    return () => {
-      isDisposed = true;
-      abortController.abort();
-    };
-  }, [modelInfo?.url]);
-
   const contextValue = useMemo(
     () => ({
       modelInfo,
-      motionCatalogMap,
       setModelInfo,
       isLoading,
       setIsLoading,
     }),
-    [isLoading, modelInfo, motionCatalogMap, setIsLoading],
+    [isLoading, modelInfo, setIsLoading],
   );
 
   return (

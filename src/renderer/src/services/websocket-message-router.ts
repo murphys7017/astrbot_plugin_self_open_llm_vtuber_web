@@ -3,6 +3,7 @@ import { HistoryInfo } from '@/context/websocket-context';
 import { MessageEvent } from '@/services/websocket-service';
 import { audioTaskQueue } from '@/utils/task-queue';
 import {
+  getPendingFrontendRequestType,
   markFrontendFirstResponse,
   markFrontendTranscriptionReceived,
 } from '@/utils/timing-debug';
@@ -297,7 +298,7 @@ export const createWebSocketMessageHandler = ({
         }
         break;
       case 'user-input-transcription':
-        if (message.text) {
+        if (message.text && getPendingFrontendRequestType() === 'voice') {
           markFrontendTranscriptionReceived(message.text);
           appendHumanMessage(message.text);
         }

@@ -43,8 +43,8 @@ export const useAudioTask = () => {
   const { setSubtitleText } = useSubtitle();
   const { appendResponse, appendAIMessage, fullResponse } = useChatHistory();
   const { sendMessage } = useWebSocket();
-  const { modelInfo, motionCatalogMap } = useLive2DConfig();
-  const { setExpression, setExpressionWithRetry, resetExpression } = useLive2DExpression();
+  const { modelInfo } = useLive2DConfig();
+  const { setExpression, resetExpression } = useLive2DExpression();
   const expressionOnlyHoldMs = 900;
 
   // State refs to avoid stale closures
@@ -72,8 +72,7 @@ export const useAudioTask = () => {
   const resetModelExpression = useCallback(() => {
     const lappAdapter = (window as any).getLAppAdapter?.();
     if (!lappAdapter) {
-      console.warn('[AudioTask] LAppAdapter not found for expression reset');
-      return;
+      throw new Error('[AudioTask] LAppAdapter not found for expression reset.');
     }
 
     resetExpression(lappAdapter, modelInfo);
@@ -89,16 +88,12 @@ export const useAudioTask = () => {
     expressions?: string[] | number[] | null,
     expressionDecision?: ExpressionDecisionPayload | null,
     lappAdapter?: any,
-    options?: {
-      preferMotion?: boolean
-    },
   ): string | number | null => {
     return resolvePlaybackExpressionHelper({
       emotionMap: modelInfo?.emotionMap,
       expressions,
       expressionDecision,
       lappAdapter,
-      preferMotion: options?.preferMotion ?? false,
     });
   }, [
     modelInfo?.emotionMap,
@@ -153,31 +148,18 @@ export const useAudioTask = () => {
     const decisionMotionCandidates = directMotionCandidates.length === 0
       ? getExpressionDecisionMotionCandidates(
         expressionDecision,
-        {
-          ...modelInfo?.motionMap,
-          ...motionCatalogMap,
-        },
+        modelInfo?.motionMap,
       )
       : [];
     const motionCandidates = directMotionCandidates.length > 0
       ? directMotionCandidates
       : decisionMotionCandidates;
 
-    const resolveExpressionValue = (
-      resolvedMotion: { groupName: string; motionIndex: number } | null,
-      adapterInstance: any,
-    ) => {
-      const hasDirectMotions = directMotionCandidates.length > 0;
-      const hasDecisionMotionFallback = decisionMotionCandidates.length > 0;
-      const shouldSkipExpressionDecision = hasDirectMotions;
-      const shouldSuppressExpressions = hasDirectMotions
-        || (hasDecisionMotionFallback && Boolean(resolvedMotion));
-
+    const resolveExpressionValue = (adapterInstance: any) => {
       return resolvePlaybackExpression(
-        shouldSuppressExpressions ? null : expressions,
-        shouldSkipExpressionDecision ? null : expressionDecision,
+        expressions,
+        expressionDecision,
         adapterInstance,
-        { preferMotion: shouldSuppressExpressions || Boolean(resolvedMotion) },
       );
     };
 
@@ -192,43 +174,38 @@ export const useAudioTask = () => {
 
     try {
       if (!lappAdapter) {
-        console.warn('[AudioTask] LAppAdapter not found for expression handling');
+        throw new Error('[AudioTask] LAppAdapter not found for expression and motion handling.');
       } else if (!audioUrl) {
         const resolvedStandaloneMotion = resolvePlaybackMotion(
           lappAdapter?.getModel?.(),
           motionCandidates,
         );
-        if (directMotionCandidates.length > 0 && !resolvedStandaloneMotion) {
-          console.error('[AudioTask] Failed to resolve backend actions.motions:', directMotionCandidates);
+        if (motionCandidates.length > 0 && !resolvedStandaloneMotion) {
+          throw new Error(
+            `[AudioTask] Failed to resolve motion candidates: ${motionCandidates.join(', ')}`,
+          );
         }
-        const standaloneExpressionValue = resolveExpressionValue(
-          resolvedStandaloneMotion,
-          lappAdapter,
-        );
+        const standaloneExpressionValue = resolvedStandaloneMotion
+          ? null
+          : resolveExpressionValue(lappAdapter);
 
         if (standaloneExpressionValue !== null) {
-          try {
-            if (resolvedStandaloneMotion) {
-              playResolvedMotion(lappAdapter?.getModel?.(), resolvedStandaloneMotion);
-            }
+          if (resolvedStandaloneMotion) {
+            playResolvedMotion(lappAdapter?.getModel?.(), resolvedStandaloneMotion);
+          }
 
-            const applied = await setExpressionWithRetry(
-              standaloneExpressionValue,
-              lappAdapter,
-              `Set expression to: ${standaloneExpressionValue}`,
-            );
+          setExpression(
+            standaloneExpressionValue,
+            lappAdapter,
+            `Set expression to: ${standaloneExpressionValue}`,
+          );
 
-            if (applied) {
-              await new Promise((resolve) => {
-                window.setTimeout(resolve, expressionOnlyHoldMs);
-              });
+          await new Promise((resolve) => {
+            window.setTimeout(resolve, expressionOnlyHoldMs);
+          });
 
-              if (stateRef.current.aiState !== 'interrupted') {
-                resetModelExpression();
-              }
-            }
-          } catch (err) {
-            console.error('[AudioTask] Failed to set expression:', err);
+          if (stateRef.current.aiState !== 'interrupted') {
+            resetModelExpression();
           }
         } else if (resolvedStandaloneMotion) {
           playResolvedMotion(lappAdapter.getModel?.(), resolvedStandaloneMotion);
@@ -239,28 +216,29 @@ export const useAudioTask = () => {
       if (audioUrl) {
         const live2dManager = (window as any).getLive2DManager?.();
         if (!live2dManager) {
-          console.error('Live2D manager not found');
-          return;
+          throw new Error('Live2D manager not found.');
         }
 
         const model = live2dManager.getModel(0);
         if (!model) {
-          console.error('Live2D model not found at index 0');
-          return;
+          throw new Error('Live2D model not found at index 0.');
         }
 
         const resolvedMotion = resolvePlaybackMotion(model, motionCandidates);
-        if (directMotionCandidates.length > 0 && !resolvedMotion) {
-          console.error('[AudioTask] Failed to resolve backend actions.motions:', directMotionCandidates);
+        if (motionCandidates.length > 0 && !resolvedMotion) {
+          throw new Error(
+            `[AudioTask] Failed to resolve motion candidates: ${motionCandidates.join(', ')}`,
+          );
         }
-        const expressionValue = resolveExpressionValue(resolvedMotion, lappAdapter);
+        const expressionValue = resolvedMotion
+          ? null
+          : resolveExpressionValue(lappAdapter);
         const playbackDeps: AudioPlaybackRuntimeDeps = {
           audioManager,
           sendMessage,
           updateSubtitle,
           resetModelExpression,
           setExpression,
-          setExpressionWithRetry,
           getAiState: () => stateRef.current.aiState,
         };
 
@@ -282,6 +260,7 @@ export const useAudioTask = () => {
         type: "error",
         duration: 2000,
       });
+      throw error;
     }
   };
 

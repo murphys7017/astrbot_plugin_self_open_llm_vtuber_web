@@ -379,30 +379,6 @@ export class LAppModel extends CubismUserModel {
         this._lipSyncIds.pushBack(this._modelSetting.getLipSyncParameterId(i));
       }
 
-      // Fallback if no LipSync IDs are defined in the model setting
-      if (this._lipSyncIds.getSize() === 0) {
-        if (LAppDefine.DebugLogEnable) {
-          console.info('[Fallback] No LipSync IDs defined in model setting. Attempting fallback to "ParamMouthOpenY".');
-        }
-        
-        const idManager = CubismFramework.getIdManager();
-        if (idManager) {
-          const fallbackId: CubismIdHandle = idManager.getId(CubismDefaultParameterId.ParamMouthOpenY);
-
-          // Check if the model actually has this parameter before adding it
-          if (this._model && fallbackId && this._model.getParameterIndex(fallbackId) !== -1) {
-            this._lipSyncIds.pushBack(fallbackId);
-            if (LAppDefine.DebugLogEnable) {
-              console.info('[Fallback] Successfully added "ParamMouthOpenY" as LipSync ID.');
-            }
-          } else if (LAppDefine.DebugLogEnable) {
-            console.info('[Fallback] Fallback ID "ParamMouthOpenY" not found in the current model or model not loaded.');
-          }
-        } else if (LAppDefine.DebugLogEnable) {
-          console.info('[Fallback] Could not access IdManager. LipSync fallback unavailable.');
-        }
-      }
-
       this._state = LoadStep.SetupLayout;
 
       // callback
@@ -923,62 +899,49 @@ export class LAppModel extends CubismUserModel {
         .then((response) => {
           if (response.ok) {
             return response.arrayBuffer();
-          } else if (response.status >= 400) {
-            CubismLogError(
-              `Failed to load file ${this._modelHomeDir}${motionFileName}`
-            );
-            return null; // Return null instead of empty ArrayBuffer
-          }
-        })
-        .then((arrayBuffer) => {
-          // Add null check before loading motion
-          if (!arrayBuffer) {
-            // If buffer is null, reduce motion count and return
-            this._allMotionCount--;
-            this.completeMotionLoadingIfReady();
-            return;
           }
 
+          throw new Error(`Failed to load file ${this._modelHomeDir}${motionFileName}`);
+        })
+        .then((arrayBuffer) => {
           const tmpMotion: CubismMotion = this.loadMotion(
             arrayBuffer,
             arrayBuffer.byteLength,
             name
           );
 
-          if (tmpMotion != null) {
-            let fadeTime = this._modelSetting.getMotionFadeInTimeValue(
-              group,
-              i
-            );
-            if (fadeTime >= 0.0) {
-              tmpMotion.setFadeInTime(fadeTime);
-            }
-
-            fadeTime = this._modelSetting.getMotionFadeOutTimeValue(group, i);
-            if (fadeTime >= 0.0) {
-              tmpMotion.setFadeOutTime(fadeTime);
-            }
-            tmpMotion.setEffectIds(this._eyeBlinkIds, this._lipSyncIds);
-
-            if (this._motions.getValue(name) != null) {
-              ACubismMotion.delete(this._motions.getValue(name));
-            }
-
-            this._motions.setValue(name, tmpMotion);
-
-            this._motionCount++;
-            this.completeMotionLoadingIfReady();
-          } else {
-            // loadMotionできなかった場合はモーションの総数がずれるので1つ減らす
-            this._allMotionCount--;
-            this.completeMotionLoadingIfReady();
+          if (tmpMotion == null) {
+            throw new Error(`Failed to decode motion ${motionFileName}`);
           }
+
+          let fadeTime = this._modelSetting.getMotionFadeInTimeValue(
+            group,
+            i
+          );
+          if (fadeTime >= 0.0) {
+            tmpMotion.setFadeInTime(fadeTime);
+          }
+
+          fadeTime = this._modelSetting.getMotionFadeOutTimeValue(group, i);
+          if (fadeTime >= 0.0) {
+            tmpMotion.setFadeOutTime(fadeTime);
+          }
+          tmpMotion.setEffectIds(this._eyeBlinkIds, this._lipSyncIds);
+
+          if (this._motions.getValue(name) != null) {
+            ACubismMotion.delete(this._motions.getValue(name));
+          }
+
+          this._motions.setValue(name, tmpMotion);
+
+          this._motionCount++;
+          this.completeMotionLoadingIfReady();
         })
         .catch((error) => {
-          // Add error handling
           CubismLogError(`Failed to load motion: ${error}`);
-          this._allMotionCount--;
-          this.completeMotionLoadingIfReady();
+          this._updating = false;
+          this._initialized = false;
+          throw error;
         });
     }
   }

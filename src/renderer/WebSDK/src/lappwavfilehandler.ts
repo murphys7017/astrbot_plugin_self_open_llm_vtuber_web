@@ -102,23 +102,21 @@ export class LAppWavFileHandler {
     return this._lastRms;
   }
 
-  public loadWavFile(filePath: string): Promise<boolean> {
-    return fetch(filePath)
-      .then((response) => response.arrayBuffer())
-      .then((arrayBuffer) => this.loadWavBuffer(arrayBuffer, filePath))
-      .catch((e) => {
-        console.log(e);
-        return false;
-      });
+  public async loadWavFile(filePath: string): Promise<boolean> {
+    const response = await fetch(filePath);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch wav file ${filePath}: ${response.status} ${response.statusText}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    return this.loadWavBuffer(arrayBuffer, filePath);
   }
 
   public loadWavBuffer(
     arrayBuffer: ArrayBuffer,
     filePath: string = ""
   ): Promise<boolean> {
-    return new Promise((resolveValue) => {
-      let ret = false;
-
+    return new Promise((resolveValue, rejectValue) => {
       if (this._pcmData != null) {
         this.releasePcmData();
       }
@@ -133,7 +131,7 @@ export class LAppWavFileHandler {
         this._byteReader._fileByte == null ||
         this._byteReader._fileSize < 4
       ) {
-        resolveValue(false);
+        rejectValue(new Error(`Invalid wav buffer for ${filePath || '<memory>'}.`));
         return;
       }
 
@@ -143,26 +141,22 @@ export class LAppWavFileHandler {
       try {
         // シグネチャ "RIFF"
         if (!this._byteReader.getCheckSignature("RIFF")) {
-          ret = false;
           throw new Error('Cannot find Signeture "RIFF".');
         }
         // ファイルサイズ-8（読み飛ばし）
         this._byteReader.get32LittleEndian();
         // シグネチャ "WAVE"
         if (!this._byteReader.getCheckSignature("WAVE")) {
-          ret = false;
           throw new Error('Cannot find Signeture "WAVE".');
         }
         // シグネチャ "fmt "
         if (!this._byteReader.getCheckSignature("fmt ")) {
-          ret = false;
           throw new Error('Cannot find Signeture "fmt".');
         }
         // fmtチャンクサイズ
         const fmtChunkSize = this._byteReader.get32LittleEndian();
         // フォーマットIDは1（リニアPCM）以外受け付けない
         if (this._byteReader.get16LittleEndian() != 1) {
-          ret = false;
           throw new Error("File is not linear PCM.");
         }
         // チャンネル数
@@ -192,7 +186,6 @@ export class LAppWavFileHandler {
         }
         // ファイル内に"data"チャンクが出現しなかった
         if (this._byteReader._readOffset >= this._byteReader._fileSize) {
-          ret = false;
           throw new Error('Cannot find "data" Chunk.');
         }
         // サンプル数
@@ -228,13 +221,12 @@ export class LAppWavFileHandler {
             this._pcmData[channelCount][sampleCount] = this.getPcmSample();
           }
         }
-
-        ret = true;
       } catch (e) {
-        console.log(e);
+        rejectValue(e instanceof Error ? e : new Error(String(e)));
+        return;
       }
 
-      resolveValue(ret);
+      resolveValue(true);
     });
   }
 

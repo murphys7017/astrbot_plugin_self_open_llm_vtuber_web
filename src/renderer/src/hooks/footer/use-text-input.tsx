@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useWebSocket } from '@/context/websocket-context';
 import { useAiState } from '@/context/ai-state-context';
 import { useInterrupt } from '@/hooks/utils/use-interrupt';
@@ -10,6 +10,7 @@ import { markFrontendRequestStart } from '@/utils/timing-debug';
 export function useTextInput() {
   const [inputText, setInputText] = useState('');
   const [isComposing, setIsComposing] = useState(false);
+  const sendInFlightRef = useRef(false);
   const wsContext = useWebSocket();
   const { aiState } = useAiState();
   const { interrupt } = useInterrupt();
@@ -22,26 +23,33 @@ export function useTextInput() {
   };
 
   const handleSend = async () => {
-    if (!inputText.trim() || !wsContext) return;
-    if (aiState === 'thinking-speaking') {
-      interrupt();
+    const trimmedText = inputText.trim();
+    if (!trimmedText || !wsContext || sendInFlightRef.current) return;
+    sendInFlightRef.current = true;
+
+    try {
+      if (aiState === 'thinking-speaking') {
+        interrupt();
+      }
+
+      const images = await captureAllMedia();
+
+      appendHumanMessage(trimmedText);
+      markFrontendRequestStart('text', {
+        textLength: trimmedText.length,
+        imageCount: Array.isArray(images) ? images.length : 0,
+      });
+      wsContext.sendMessage({
+        type: 'text-input',
+        text: trimmedText,
+        images,
+      });
+
+      if (autoStopMic) stopMic();
+      setInputText('');
+    } finally {
+      sendInFlightRef.current = false;
     }
-
-    const images = await captureAllMedia();
-
-    appendHumanMessage(inputText.trim());
-    markFrontendRequestStart('text', {
-      textLength: inputText.trim().length,
-      imageCount: Array.isArray(images) ? images.length : 0,
-    });
-    wsContext.sendMessage({
-      type: 'text-input',
-      text: inputText.trim(),
-      images,
-    });
-
-    if (autoStopMic) stopMic();
-    setInputText('');
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {

@@ -26,6 +26,7 @@ export function usePetOverlayBridge() {
     startMic, stopMic, autoStartMicOn, autoStopMic, micOn,
   } = useVAD();
   const { captureAllMedia } = useMediaCapture();
+  const sendInFlightRef = useRef(false);
 
   // 【P1 修复】使用 useRef 隔离高频状态，稳定三个事件处理器
   const stateRef = useRef({
@@ -48,27 +49,32 @@ export function usePetOverlayBridge() {
   const handleOverlaySendText = useCallback(async (payload: { text?: string; timestamp?: number } | string) => {
     const rawText = typeof payload === 'string' ? payload : payload?.text ?? '';
     const text = rawText.trim();
-    if (!text) return;
+    if (!text || sendInFlightRef.current) return;
+    sendInFlightRef.current = true;
 
-    // 从 ref 获取最新的 aiState，而不在依赖中包含
-    if (stateRef.current.aiState === 'thinking-speaking') {
-      interrupt();
-    }
+    try {
+      // 从 ref 获取最新的 aiState，而不在依赖中包含
+      if (stateRef.current.aiState === 'thinking-speaking') {
+        interrupt();
+      }
 
-    const images = await captureAllMedia();
-    appendHumanMessage(text);
-    markFrontendRequestStart('text', {
-      textLength: text.length,
-      imageCount: Array.isArray(images) ? images.length : 0,
-    });
-    sendMessage({
-      type: 'text-input',
-      text,
-      images,
-    });
+      const images = await captureAllMedia();
+      appendHumanMessage(text);
+      markFrontendRequestStart('text', {
+        textLength: text.length,
+        imageCount: Array.isArray(images) ? images.length : 0,
+      });
+      sendMessage({
+        type: 'text-input',
+        text,
+        images,
+      });
 
-    if (autoStopMic) {
-      stopMic();
+      if (autoStopMic) {
+        stopMic();
+      }
+    } finally {
+      sendInFlightRef.current = false;
     }
   }, [interrupt, captureAllMedia, appendHumanMessage, sendMessage, autoStopMic, stopMic]);
 

@@ -25,6 +25,10 @@ const getTimingDebugState = (): TimingDebugState => {
   return window.__desktopVtuberTimingDebug__;
 };
 
+export const getPendingFrontendRequestType = (): PendingRequestType => {
+  return getTimingDebugState().pendingRequestType;
+};
+
 export const markFrontendRequestStart = (
   type: Exclude<PendingRequestType, null>,
   detail?: Record<string, unknown>,

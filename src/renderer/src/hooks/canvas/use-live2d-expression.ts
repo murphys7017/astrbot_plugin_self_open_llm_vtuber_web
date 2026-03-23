@@ -5,10 +5,6 @@ import { ModelInfo } from '@/context/live2d-config-context';
  * Custom hook for handling Live2D model expressions
  */
 export const useLive2DExpression = () => {
-  const sleep = (ms: number) => new Promise((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
-
   const getLoadedExpressionNames = useCallback((lappAdapter: any): string[] => {
     const count = lappAdapter?.getExpressionCount?.() ?? 0;
     const names: string[] = [];
@@ -73,29 +69,33 @@ export const useLive2DExpression = () => {
     const loadedExpressionNames = getLoadedExpressionNames(lappAdapter);
 
     if (modelExpressionCount > 0 && loadedExpressionNames.length < modelExpressionCount) {
-      console.log(
-        '[setExpression] Expression assets are still loading:',
-        `${loadedExpressionNames.length}/${modelExpressionCount}`,
+      throw new Error(
+        `[setExpression] Expression assets are still loading: `
+        + `${loadedExpressionNames.length}/${modelExpressionCount}`,
       );
-      return null;
     }
 
     if (typeof expressionValue === 'number') {
-      console.log('[setExpression] Setting expression by index:', expressionValue);
+      if (expressionValue < 0 || expressionValue >= modelExpressionCount) {
+        throw new Error(
+          `[setExpression] Expression index ${expressionValue} is out of range `
+          + `for ${modelExpressionCount} expressions.`,
+        );
+      }
       const expressionName = lappAdapter.getExpressionName(expressionValue);
-      console.log('[setExpression] Retrieved expression name:', expressionName);
-      return expressionName || null;
+      if (!expressionName) {
+        throw new Error(`[setExpression] Failed to resolve expression name for index ${expressionValue}.`);
+      }
+      return expressionName;
     }
 
     if (typeof expressionValue !== 'string') {
-      console.error('[setExpression] Unsupported expression value type:', typeof expressionValue);
-      return null;
+      throw new Error(`[setExpression] Unsupported expression value type: ${typeof expressionValue}`);
     }
 
     const trimmedValue = expressionValue.trim();
     if (!trimmedValue) {
-      console.error('[setExpression] Empty expression value received');
-      return null;
+      throw new Error('[setExpression] Empty expression value received');
     }
 
     const resolvedFromFile = resolveExpressionNameFromFile(trimmedValue, lappAdapter);
@@ -105,10 +105,17 @@ export const useLive2DExpression = () => {
 
     if (/^\d+$/.test(trimmedValue)) {
       const expressionIndex = Number(trimmedValue);
-      console.log('[setExpression] Normalizing numeric string to index:', expressionIndex);
+      if (expressionIndex < 0 || expressionIndex >= modelExpressionCount) {
+        throw new Error(
+          `[setExpression] Expression index ${expressionIndex} is out of range `
+          + `for ${modelExpressionCount} expressions.`,
+        );
+      }
       const expressionName = lappAdapter.getExpressionName(expressionIndex);
-      console.log('[setExpression] Retrieved expression name from numeric string:', expressionName);
-      return expressionName || null;
+      if (!expressionName) {
+        throw new Error(`[setExpression] Failed to resolve expression name for index ${expressionIndex}.`);
+      }
+      return expressionName;
     }
 
     const exactMatch = loadedExpressionNames.find((name) => name === trimmedValue);
@@ -129,13 +136,10 @@ export const useLive2DExpression = () => {
       return caseInsensitiveMatch;
     }
 
-    console.error(
-      '[setExpression] Failed to resolve expression name:',
-      trimmedValue,
-      'Available expressions:',
-      loadedExpressionNames,
+    throw new Error(
+      `[setExpression] Failed to resolve expression "${trimmedValue}". `
+      + `Available expressions: ${loadedExpressionNames.join(', ')}`,
     );
-    return null;
   }, [getLoadedExpressionNames, resolveExpressionNameFromFile]);
 
   /**
@@ -149,59 +153,15 @@ export const useLive2DExpression = () => {
     lappAdapter: any,
     logMessage?: string,
   ): boolean => {
-    try {
-      console.log('[setExpression] Input value:', expressionValue, 'Type:', typeof expressionValue);
+    const expressionName = resolveExpressionName(expressionValue, lappAdapter);
+    lappAdapter.setExpression(expressionName);
 
-      const expressionName = resolveExpressionName(expressionValue, lappAdapter);
-      if (!expressionName) {
-        return false;
-      }
-
-      console.log('[setExpression] Calling setExpression with name:', expressionName);
-      lappAdapter.setExpression(expressionName);
-
-      if (logMessage) {
-        console.log(logMessage);
-      }
-
-      return true;
-    } catch (error) {
-      console.error('[setExpression] Failed to set expression:', error);
-      return false;
+    if (logMessage) {
+      console.log(logMessage);
     }
+
+    return true;
   }, [resolveExpressionName]);
-
-  const setExpressionWithRetry = useCallback(async (
-    expressionValue: string | number,
-    lappAdapter: any,
-    logMessage?: string,
-    maxAttempts: number = 10,
-    retryDelayMs: number = 200,
-  ): Promise<boolean> => {
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      const success = setExpression(expressionValue, lappAdapter, logMessage);
-      if (success) {
-        if (attempt > 1) {
-          console.log(`[setExpression] Expression applied after retry ${attempt}/${maxAttempts}`);
-        }
-        return true;
-      }
-
-      if (attempt < maxAttempts) {
-        console.log(
-          `[setExpression] Retry scheduled for expression ${String(expressionValue)} ` +
-          `(${attempt}/${maxAttempts})`,
-        );
-        await sleep(retryDelayMs);
-      }
-    }
-
-    console.error(
-      `[setExpression] Exhausted retries for expression ${String(expressionValue)} ` +
-      `after ${maxAttempts} attempts`,
-    );
-    return false;
-  }, [setExpression]);
 
   /**
    * Reset expression to default
@@ -212,44 +172,30 @@ export const useLive2DExpression = () => {
     lappAdapter: any,
     modelInfo?: ModelInfo,
   ) => {
-    if (!lappAdapter) return;
-
-    try {
-      // Check if model is loaded and has expressions
-      const model = lappAdapter.getModel();
-      if (!model || !model._modelSetting) {
-        console.log('Model or model settings not loaded yet, skipping expression reset');
-        return;
-      }
-
-      // If model has a default emotion defined, use it
-      if (modelInfo?.defaultEmotion !== undefined) {
-        void setExpressionWithRetry(
-          modelInfo.defaultEmotion,
-          lappAdapter,
-          `Reset expression to default: ${modelInfo.defaultEmotion}`,
-        );
-      } else {
-        // Check if model has any expressions before trying to get the first one
-        const expressionCount = lappAdapter.getExpressionCount();
-        if (expressionCount > 0) {
-          const defaultExpressionName = lappAdapter.getExpressionName(0);
-          if (defaultExpressionName) {
-            void setExpressionWithRetry(
-              defaultExpressionName,
-              lappAdapter,
-            );
-          }
-        }
-      }
-    } catch (error) {
-      console.log('Failed to reset expression:', error);
+    if (!lappAdapter) {
+      throw new Error('Cannot reset expression without a Live2D adapter.');
     }
-  }, [setExpressionWithRetry]);
+
+    const model = lappAdapter.getModel();
+    if (!model || !model._modelSetting) {
+      throw new Error('Cannot reset expression before the Live2D model is ready.');
+    }
+
+    model._expressionManager?.stopAllMotions?.();
+
+    if (modelInfo?.defaultEmotion === undefined) {
+      return;
+    }
+
+    setExpression(
+      modelInfo.defaultEmotion,
+      lappAdapter,
+      `Reset expression to default: ${modelInfo.defaultEmotion}`,
+    );
+  }, [setExpression]);
 
   return {
     setExpression,
-    setExpressionWithRetry,
     resetExpression,
   };
 };

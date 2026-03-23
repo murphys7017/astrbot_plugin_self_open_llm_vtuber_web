@@ -43,12 +43,49 @@ export const Live2D = memo(
 
     // Reset expression to default when AI state becomes idle
     useEffect(() => {
-      if (aiState === AiStateEnum.IDLE) {
-        const lappAdapter = (window as any).getLAppAdapter?.();
-        if (lappAdapter) {
-          resetExpression(lappAdapter, modelInfo);
-        }
+      if (aiState !== AiStateEnum.IDLE) {
+        return undefined;
       }
+
+      let cancelled = false;
+      let timerId: number | null = null;
+
+      const tryResetExpression = () => {
+        if (cancelled) {
+          return;
+        }
+
+        if (modelInfo?.defaultEmotion === undefined) {
+          return;
+        }
+
+        const lappAdapter = (window as any).getLAppAdapter?.();
+        const model = lappAdapter?.getModel?.();
+        const expressionCount = model?._modelSetting?.getExpressionCount?.() ?? 0;
+        const loadedExpressionCount = lappAdapter?.getExpressionCount?.() ?? 0;
+        const isReady = Boolean(
+          lappAdapter
+          && model
+          && model._modelSetting
+          && (expressionCount === 0 || loadedExpressionCount >= expressionCount),
+        );
+
+        if (!isReady) {
+          timerId = window.setTimeout(tryResetExpression, 100);
+          return;
+        }
+
+        resetExpression(lappAdapter, modelInfo);
+      };
+
+      tryResetExpression();
+
+      return () => {
+        cancelled = true;
+        if (timerId !== null) {
+          window.clearTimeout(timerId);
+        }
+      };
     }, [aiState, modelInfo, resetExpression]);
 
     const handlePointerDown = (e: React.PointerEvent) => {

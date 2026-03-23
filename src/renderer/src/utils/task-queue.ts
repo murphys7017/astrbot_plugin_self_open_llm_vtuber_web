@@ -38,16 +38,21 @@ export class TaskQueue {
     if (task) {
       const taskPromise = task();
       this.activeTasks.add(taskPromise);
+      let taskError: unknown;
 
       try {
         await taskPromise;
         await new Promise(resolve => setTimeout(resolve, this.taskInterval));
       } catch (error) {
-        console.error('Task Queue Error', error);
+        taskError = error;
       } finally {
         this.activeTasks.delete(taskPromise);
         this.running = false;
-        this.runNextTask();
+        void this.runNextTask();
+      }
+
+      if (taskError) {
+        throw taskError;
       }
     }
   }

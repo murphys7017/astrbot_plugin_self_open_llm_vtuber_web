@@ -1,11 +1,5 @@
 import * as LAppDefine from '../../../WebSDK/src/lappdefine';
 
-export interface SharedAudioSource {
-  audioBuffer: ArrayBuffer
-  playbackUrl: string
-  release: () => void
-}
-
 export interface AudioPlaybackRuntimeDeps {
   audioManager: {
     setCurrentAudio: (audio: HTMLAudioElement, model: any, onStop?: () => void) => void
@@ -16,13 +10,6 @@ export interface AudioPlaybackRuntimeDeps {
   updateSubtitle: (text: string) => void
   resetModelExpression: () => void
   setExpression: (expression: string | number, lappAdapter: any, reason: string) => boolean
-  setExpressionWithRetry: (
-    expression: string | number,
-    lappAdapter: any,
-    reason: string,
-    retryCount?: number,
-    retryDelay?: number
-  ) => Promise<boolean>
   getAiState: () => string
 }
 
@@ -37,31 +24,7 @@ export interface ExpressionDecisionPayload {
 
 type MotionAssetMap = Record<string, string | string[]>;
 
-const semanticExpressionFallbacks: Record<string, string[]> = {
-  neutral: ['Neutral'],
-  calm: ['Neutral'],
-  happy: ['Happy', 'Blush', 'Neutral'],
-  joy: ['Happy', 'Blush', 'Neutral'],
-  cheerful: ['Happy', 'Blush', 'Neutral'],
-  angry: ['Angry', 'Murderous', 'Neutral'],
-  mad: ['Angry', 'Murderous', 'Neutral'],
-  surprised: ['Surprised', 'Exclamation', 'Question'],
-  surprise: ['Surprised', 'Exclamation', 'Question'],
-  confused: ['Confused', 'Question', 'Neutral'],
-  curious: ['Question', 'Confused', 'Neutral'],
-  question: ['Question', 'Confused', 'Neutral'],
-  thinking: ['Loading', 'Question', 'Confused', 'Neutral'],
-  loading: ['Loading', 'Question', 'Neutral'],
-  embarrassed: ['Embarrassed', 'Blush', 'Neutral'],
-  blush: ['Blush', 'Embarrassed', 'Neutral'],
-  shy: ['Embarrassed', 'Blush', 'Neutral'],
-  tired: ['Tired', 'ExtremelyTired', 'Neutral'],
-  exhausted: ['ExtremelyTired', 'Tired', 'Neutral'],
-  sleepy: ['ExtremelyTired', 'Tired', 'Neutral'],
-  messy: ['Messy', 'Neutral'],
-  murderous: ['Murderous', 'Angry', 'Neutral'],
-  excited: ['Exclamation', 'Happy', 'Surprised'],
-};
+type EmotionMap = Record<string, string | number>;
 
 export const normalizeExpressionValue = (value?: string | number | null) => {
   if (typeof value === 'number') {
@@ -72,7 +35,7 @@ export const normalizeExpressionValue = (value?: string | number | null) => {
 };
 
 export const findMappedExpression = (
-  emotionMap: Record<string, string> | undefined,
+  emotionMap: EmotionMap | undefined,
   key?: string,
 ): string | number | null => {
   const normalized = normalizeExpressionValue(key);
@@ -145,44 +108,16 @@ export const findModelExpressionMatch = (
   return null;
 };
 
-export const findSemanticFallbackExpression = (
-  key: string | null | undefined,
-  lappAdapter: any,
-  emotionMap: Record<string, string> | undefined,
-): string | number | null => {
-  const normalizedKey = normalizeExpressionValue(key);
-  if (!normalizedKey) {
-    return null;
-  }
-
-  const fallbackCandidates = semanticExpressionFallbacks[normalizedKey] ?? [];
-  for (const fallbackCandidate of fallbackCandidates) {
-    const mappedExpression = findMappedExpression(emotionMap, fallbackCandidate);
-    if (mappedExpression !== null) {
-      return mappedExpression;
-    }
-
-    const modelExpression = findModelExpressionMatch(fallbackCandidate, lappAdapter);
-    if (modelExpression !== null) {
-      return modelExpression;
-    }
-  }
-
-  return null;
-};
-
 export const resolvePlaybackExpression = ({
   emotionMap,
   expressions,
   expressionDecision,
   lappAdapter,
-  preferMotion = false,
 }: {
-  emotionMap: Record<string, string> | undefined
+  emotionMap: EmotionMap | undefined
   expressions?: string[] | number[] | null
   expressionDecision?: ExpressionDecisionPayload | null
   lappAdapter?: any
-  preferMotion?: boolean
 }): string | number | null => {
   const baseExpression = expressionDecision?.base_expression?.trim();
   const semanticExpression = expressionDecision?.semantic_expression?.trim();
@@ -221,12 +156,7 @@ export const resolvePlaybackExpression = ({
     }
   }
 
-  if (preferMotion) {
-    return null;
-  }
-
-  return findSemanticFallbackExpression(baseExpression, lappAdapter, emotionMap)
-    ?? findSemanticFallbackExpression(semanticExpression, lappAdapter, emotionMap);
+  return null;
 };
 
 export const normalizeMotionPath = (value?: string) => {
@@ -410,71 +340,21 @@ export const playResolvedMotion = (
   priority: number = LAppDefine?.PriorityNormal ?? 3,
 ) => {
   if (!motion) {
-    return false;
+    throw new Error('Cannot play a null motion.');
   }
 
-  try {
-    model.startMotion(motion.groupName, motion.motionIndex, priority);
-    return true;
-  } catch (error) {
-    console.error('[AudioTask] Failed to play motion:', error);
-    return false;
-  }
-};
-
-export const resolveAudioMimeType = (audioUrl: string, contentType?: string | null) => {
-  if (contentType && contentType !== 'application/octet-stream') {
-    return contentType;
-  }
-
-  const extension = audioUrl.split('?')[0]?.split('.').pop()?.toLowerCase();
-  switch (extension) {
-    case 'mp3':
-      return 'audio/mpeg';
-    case 'ogg':
-      return 'audio/ogg';
-    case 'opus':
-      return 'audio/opus';
-    case 'm4a':
-      return 'audio/mp4';
-    case 'aac':
-      return 'audio/aac';
-    case 'flac':
-      return 'audio/flac';
-    case 'wav':
-    default:
-      return 'audio/wav';
-  }
-};
-
-export const prepareSharedAudioSource = async (audioUrl: string): Promise<SharedAudioSource> => {
-  const response = await fetch(audioUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch audio: ${response.status} ${response.statusText}`);
-  }
-
-  const audioBuffer = await response.arrayBuffer();
-  const playbackBlob = new Blob([audioBuffer], {
-    type: resolveAudioMimeType(audioUrl, response.headers.get('content-type')),
-  });
-  const playbackUrl = URL.createObjectURL(playbackBlob);
-
-  return {
-    audioBuffer,
-    playbackUrl,
-    release: () => URL.revokeObjectURL(playbackUrl),
-  };
+  model.startMotion(motion.groupName, motion.motionIndex, priority);
+  return true;
 };
 
 export const preloadLipSyncAudio = async (
   model: any,
   audio: HTMLAudioElement,
   audioUrl: string,
-  audioBuffer?: ArrayBuffer,
 ) => {
   const wavFileHandler = model?._wavFileHandler;
   if (!wavFileHandler) {
-    return;
+    throw new Error('Model does not expose _wavFileHandler; lip sync cannot be initialized.');
   }
 
   wavFileHandler.releasePcmData?.();
@@ -545,9 +425,7 @@ export const preloadLipSyncAudio = async (
     };
   }
 
-  const loaded = audioBuffer
-    ? await wavFileHandler.loadWavBuffer(audioBuffer, audioUrl)
-    : await wavFileHandler.loadWavFile(audioUrl);
+  const loaded = await wavFileHandler.loadWavFile(audioUrl);
   if (!loaded) {
     throw new Error('Failed to preload lip sync audio data');
   }
@@ -571,44 +449,20 @@ export const runAudioPlaybackLifecycle = async ({
   expressionValue: string | number | null
   resolvedMotion: { groupName: string; motionIndex: number } | null
   deps: AudioPlaybackRuntimeDeps
-}): Promise<void> => new Promise<void>((resolve) => {
+}): Promise<void> => new Promise<void>((resolve, reject) => {
   const setupPlayback = async () => {
-    let sharedAudioSource: SharedAudioSource | null = null;
-
     try {
       if (!model._wavFileHandler) {
-        console.warn('Model does not have _wavFileHandler for lip sync');
+        throw new Error('Model does not have _wavFileHandler for lip sync.');
       }
 
-      sharedAudioSource = await prepareSharedAudioSource(audioUrl);
-
-      if (!resolvedMotion && LAppDefine && LAppDefine.PriorityNormal) {
-        model.startRandomMotion(
-          "Talk",
-          LAppDefine.PriorityNormal,
-        );
-      } else if (!resolvedMotion) {
-        console.warn("LAppDefine.PriorityNormal not found - cannot start talk motion");
-      }
-
-      const audio = new Audio(sharedAudioSource.playbackUrl);
+      const audio = new Audio(audioUrl);
       audio.preload = 'auto';
-      const lipSyncReadyPromise = preloadLipSyncAudio(
-        model,
-        audio,
-        audioUrl,
-        sharedAudioSource.audioBuffer,
-      )
-        .then(() => true)
-        .catch((error) => {
-          console.error('Failed to preload lip sync audio:', error);
-          return false;
-        });
+      const lipSyncReadyPromise = preloadLipSyncAudio(model, audio, audioUrl);
 
       console.log('[AudioTaskTiming] loaded_audio_source', {
         at: performance.now(),
         audioUrl,
-        playbackUrl: sharedAudioSource.playbackUrl,
       });
 
       let isFinished = false;
@@ -638,11 +492,18 @@ export const runAudioPlaybackLifecycle = async ({
       const cleanup = () => {
         detachAudioListeners();
         deps.audioManager.clearCurrentAudio(audio);
-        sharedAudioSource?.release();
-        sharedAudioSource = null;
         if (!isFinished) {
           isFinished = true;
           resolve();
+        }
+      };
+
+      const fail = (error: unknown) => {
+        detachAudioListeners();
+        deps.audioManager.clearCurrentAudio(audio);
+        if (!isFinished) {
+          isFinished = true;
+          reject(error instanceof Error ? error : new Error(String(error)));
         }
       };
 
@@ -679,23 +540,11 @@ export const runAudioPlaybackLifecycle = async ({
         }
 
         if (expressionValue !== null && lappAdapter) {
-          const applied = deps.setExpression(
+          deps.setExpression(
             expressionValue,
             lappAdapter,
             `Set expression to: ${expressionValue}`,
           );
-
-          if (!applied) {
-            void deps.setExpressionWithRetry(
-              expressionValue,
-              lappAdapter,
-              `Set expression to: ${expressionValue}`,
-              6,
-              50,
-            ).catch((err) => {
-              console.error('[AudioTask] Failed to set expression during playback:', err);
-            });
-          }
         }
 
         if (resolvedMotion) {
@@ -714,10 +563,15 @@ export const runAudioPlaybackLifecycle = async ({
         playRequested = true;
 
         if (deps.getAiState() === 'interrupted' || !isActiveAudio()) {
-          console.warn('Audio playback cancelled due to interruption or audio was stopped');
           cleanup();
           return;
         }
+
+        void lipSyncReadyPromise.catch((error) => {
+          if (isActiveAudio()) {
+            fail(error);
+          }
+        });
 
         audio.play().catch((err) => {
           if (!isActiveAudio()) {
@@ -725,23 +579,7 @@ export const runAudioPlaybackLifecycle = async ({
             return;
           }
 
-          if (audio.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-            playRequested = false;
-            return;
-          }
-
-          console.error("Audio play error:", err);
-          cleanup();
-        });
-
-        void lipSyncReadyPromise.then((loaded) => {
-          if (!loaded || !isActiveAudio()) {
-            return;
-          }
-
-          if (model._wavFileHandler) {
-            model._wavFileHandler._syncAudioElement = audio;
-          }
+          fail(err);
         });
       };
 
@@ -771,9 +609,8 @@ export const runAudioPlaybackLifecycle = async ({
           return;
         }
 
-        console.error("Audio playback error:", error);
         clearPlaybackVisuals();
-        cleanup();
+        fail(error);
       }
 
       audio.addEventListener('playing', handlePlaybackStart);
@@ -782,11 +619,8 @@ export const runAudioPlaybackLifecycle = async ({
       audio.addEventListener('error', handleError);
 
       audio.load();
-      requestPlayback();
     } catch (error) {
-      sharedAudioSource?.release();
-      console.error('Audio playback setup error:', error);
-      resolve();
+      reject(error instanceof Error ? error : new Error(String(error)));
     }
   };
 
