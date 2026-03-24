@@ -10,6 +10,7 @@ import { useAiState, AiStateEnum } from "@/context/ai-state-context";
 import { useLive2DExpression } from "@/hooks/canvas/use-live2d-expression";
 import { useForceIgnoreMouse } from "@/hooks/utils/use-force-ignore-mouse";
 import { useMode } from "@/context/mode-context";
+import { setLimitedFrameRate } from "../../../WebSDK/src/lappdefine";
 
 interface Live2DProps {
   showSidebar?: boolean;
@@ -17,6 +18,10 @@ interface Live2DProps {
 
 export const Live2D = memo(
   ({ showSidebar }: Live2DProps): JSX.Element => {
+    const ACTIVE_RENDER_FPS = 60;
+    const IDLE_RENDER_FPS = 30;
+    const BACKGROUND_RENDER_FPS = 12;
+
     const { forceIgnoreMouse } = useForceIgnoreMouse();
     const { modelInfo } = useLive2DConfig();
     const { mode } = useMode();
@@ -40,6 +45,31 @@ export const Live2D = memo(
 
     // Setup hooks
     useIpcHandlers();
+
+    useEffect(() => {
+      const applyAdaptiveFrameRate = () => {
+        const isBackgrounded = document.hidden || !document.hasFocus();
+        const nextFrameRate = isBackgrounded
+          ? BACKGROUND_RENDER_FPS
+          : (isDragging || aiState === AiStateEnum.THINKING_SPEAKING)
+            ? ACTIVE_RENDER_FPS
+            : IDLE_RENDER_FPS;
+
+        setLimitedFrameRate(nextFrameRate);
+      };
+
+      applyAdaptiveFrameRate();
+      document.addEventListener('visibilitychange', applyAdaptiveFrameRate);
+      window.addEventListener('focus', applyAdaptiveFrameRate);
+      window.addEventListener('blur', applyAdaptiveFrameRate);
+
+      return () => {
+        document.removeEventListener('visibilitychange', applyAdaptiveFrameRate);
+        window.removeEventListener('focus', applyAdaptiveFrameRate);
+        window.removeEventListener('blur', applyAdaptiveFrameRate);
+        setLimitedFrameRate(ACTIVE_RENDER_FPS);
+      };
+    }, [aiState, isDragging]);
 
     // Reset expression to default when AI state becomes idle
     useEffect(() => {

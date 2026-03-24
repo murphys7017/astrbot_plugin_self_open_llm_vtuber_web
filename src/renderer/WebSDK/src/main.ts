@@ -14,6 +14,22 @@ import { LAppLive2DManager } from "./lapplive2dmanager";
 
 let isInitializingLive2D = false;
 let pendingInitializeLive2D = false;
+let boundPointerTarget: HTMLElement | null = null;
+let boundPointerMoveHandler: ((event: PointerEvent) => void) | null = null;
+let boundPointerDownHandler: ((event: PointerEvent) => void) | null = null;
+
+function cleanupHitTestPointerHandlers(): void {
+  if (boundPointerTarget && boundPointerMoveHandler) {
+    boundPointerTarget.removeEventListener("pointermove", boundPointerMoveHandler);
+  }
+  if (boundPointerTarget && boundPointerDownHandler) {
+    boundPointerTarget.removeEventListener("pointerdown", boundPointerDownHandler);
+  }
+
+  boundPointerTarget = null;
+  boundPointerMoveHandler = null;
+  boundPointerDownHandler = null;
+}
 
 /**
  * Initialize the Live2D application
@@ -57,6 +73,7 @@ export function initializeLive2D(): void {
 
   // Clean up any existing instances first.
   // Repeated initialize without full delegate release can spawn multiple RAF loops.
+  cleanupHitTestPointerHandlers();
   LAppDelegate.releaseInstance();
   LAppLive2DManager.releaseInstance();
   LAppGlManager.releaseInstance();
@@ -81,10 +98,15 @@ export function initializeLive2D(): void {
     (window as any).getLAppAdapter = () => LAppAdapter.getInstance();
   }
 
-  if ((window as any).api?.setIgnoreMouseEvent) {
+  const setIgnoreMouseEvents = (window as any).api?.setIgnoreMouseEvents;
+  if (typeof setIgnoreMouseEvents === 'function') {
     const parent = document.getElementById("live2d");
 
-    parent?.addEventListener("pointermove", (e) => {
+    if (parent) {
+      boundPointerTarget = parent;
+    }
+
+    boundPointerMoveHandler = (e: PointerEvent) => {
       const model = LAppLive2DManager.getInstance().getModel(0);
       const view = LAppDelegate.getInstance().getView();
 
@@ -93,11 +115,11 @@ export function initializeLive2D(): void {
       const y = view?._deviceToScreen.transformY(e.y);
 
       // Check if mouse is over the Live2D model
-      (window as any).api.setIgnoreMouseEvent(!model?.anyhitTest(x, y) && !model?.isHitOnModel(x, y));
-    });
+      setIgnoreMouseEvents(!model?.anyhitTest(x, y) && !model?.isHitOnModel(x, y));
+    };
 
     // Add pointerdown event listener
-    parent?.addEventListener("pointerdown", (e) => {
+    boundPointerDownHandler = (e: PointerEvent) => {
       const model = LAppLive2DManager.getInstance().getModel(0);
       const view = LAppDelegate.getInstance().getView();
 
@@ -109,7 +131,14 @@ export function initializeLive2D(): void {
       const hitAreaName = model?.anyhitTest(x, y);
       const isHit = hitAreaName !== null || model?.isHitOnModel(x, y);
       console.log("Model clicked:", isHit, hitAreaName ? `in area: ${hitAreaName}` : '');
-    });
+    };
+
+    if (boundPointerTarget && boundPointerMoveHandler) {
+      boundPointerTarget.addEventListener("pointermove", boundPointerMoveHandler);
+    }
+    if (boundPointerTarget && boundPointerDownHandler) {
+      boundPointerTarget.addEventListener("pointerdown", boundPointerDownHandler);
+    }
   }
 
   finishInitialize();
@@ -135,7 +164,10 @@ window.addEventListener(
  */
 window.addEventListener(
   "beforeunload",
-  (): void => LAppDelegate.releaseInstance(),
+  (): void => {
+    cleanupHitTestPointerHandlers();
+    LAppDelegate.releaseInstance();
+  },
   { passive: true }
 );
 

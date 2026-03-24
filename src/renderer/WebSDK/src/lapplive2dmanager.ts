@@ -49,10 +49,16 @@ export class LAppLive2DManager {
    */
   public static releaseInstance(): void {
     if (s_instance != null) {
+      s_instance.release();
       s_instance = void 0;
     }
 
     s_instance = null;
+  }
+
+  public release(): void {
+    this.releaseAllModel();
+    this._viewMatrix = null;
   }
 
   /**

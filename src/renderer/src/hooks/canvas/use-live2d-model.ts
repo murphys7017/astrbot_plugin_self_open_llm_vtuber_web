@@ -62,28 +62,43 @@ export const playAudioWithLipSync = (audioPath: string, modelIndex = 0): Promise
 
   const fullPath = `/Resources/${audioPath}`;
   const audio = new Audio(fullPath);
+  const cleanup = () => {
+    audio.pause();
+    audio.removeEventListener('canplaythrough', handleCanPlayThrough);
+    audio.removeEventListener('ended', handleEnded);
+    audio.removeEventListener('error', handleError);
+    audio.src = '';
+  };
 
-  audio.addEventListener('canplaythrough', () => {
+  const handleCanPlayThrough = () => {
     const model = live2dManager.getModel(modelIndex);
     if (model) {
       if (model._wavFileHandler) {
         model._wavFileHandler.start(fullPath);
         audio.play();
       } else {
+        cleanup();
         reject(new Error('Wav file handler not available on model'));
       }
     } else {
+      cleanup();
       reject(new Error(`Model index ${modelIndex} not found`));
     }
-  });
+  };
 
-  audio.addEventListener('ended', () => {
+  const handleEnded = () => {
+    cleanup();
     resolve();
-  });
+  };
 
-  audio.addEventListener('error', () => {
+  const handleError = () => {
+    cleanup();
     reject(new Error(`Failed to load audio: ${fullPath}`));
-  });
+  };
+
+  audio.addEventListener('canplaythrough', handleCanPlayThrough);
+  audio.addEventListener('ended', handleEnded);
+  audio.addEventListener('error', handleError);
 
   audio.load();
 });
@@ -122,6 +137,8 @@ export const useLive2DModel = ({
 
     if (needsUpdate) {
       prevModelUrlRef.current = currentUrl;
+      let cancelled = false;
+      let reinitializeTimer: number | null = null;
 
       try {
         const { baseUrl, modelDir, modelFileName } = parseModelUrl(currentUrl);
@@ -129,17 +146,27 @@ export const useLive2DModel = ({
         if (baseUrl && modelDir) {
           updateModelConfig(baseUrl, modelDir, modelFileName, Number(modelInfo.kScale));
 
-          setTimeout(() => {
-            if ((window as any).LAppLive2DManager?.releaseInstance) {
-              (window as any).LAppLive2DManager.releaseInstance();
+          reinitializeTimer = window.setTimeout(() => {
+            if (cancelled) {
+              return;
             }
+
             initializeLive2D();
           }, 500);
         }
       } catch (error) {
         console.error('Error processing model URL:', error);
       }
+
+      return () => {
+        cancelled = true;
+        if (reinitializeTimer !== null) {
+          window.clearTimeout(reinitializeTimer);
+        }
+      };
     }
+
+    return undefined;
   }, [modelInfo?.url, modelInfo?.kScale]);
 
   const getModelPosition = useCallback(() => {
