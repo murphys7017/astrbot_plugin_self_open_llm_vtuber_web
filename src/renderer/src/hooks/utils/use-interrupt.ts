@@ -13,7 +13,7 @@ export const useInterrupt = () => {
   const { sendMessage } = useWebSocket();
   const { fullResponse, clearResponse } = useChatHistory();
   // const { currentModel } = useLive2DModel();
-  const { subtitleText, setSubtitleText } = useSubtitle();
+  const { setSubtitleText } = useSubtitle();
   const { modelInfo } = useLive2DConfig();
   const { resetExpression } = useLive2DExpression();
 
@@ -40,9 +40,7 @@ export const useInterrupt = () => {
 
     clearResponse();
 
-    if (subtitleText === 'Thinking...') {
-      setSubtitleText('');
-    }
+    setSubtitleText('');
   }, [
     aiState,
     clearResponse,
@@ -52,7 +50,6 @@ export const useInterrupt = () => {
     sendMessage,
     setAiState,
     setSubtitleText,
-    subtitleText,
   ]);
 
   return { interrupt };

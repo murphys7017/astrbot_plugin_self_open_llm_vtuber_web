@@ -1,6 +1,9 @@
 import { useCallback } from 'react';
 import { ModelInfo } from '@/context/live2d-config-context';
 
+const DEFAULT_EXPRESSION_TRANSITION_SECONDS = 0.2;
+const MODEL_EXPRESSION_STATE_KEY = '__astrbotCurrentExpressionName';
+
 /**
  * Custom hook for handling Live2D model expressions
  */
@@ -63,7 +66,7 @@ export const useLive2DExpression = () => {
   const resolveExpressionName = useCallback((
     expressionValue: string | number,
     lappAdapter: any,
-  ): string | null => {
+  ): string => {
     const model = lappAdapter?.getModel?.();
     const modelExpressionCount = model?._modelSetting?.getExpressionCount?.() ?? 0;
     const loadedExpressionNames = getLoadedExpressionNames(lappAdapter);
@@ -142,6 +145,64 @@ export const useLive2DExpression = () => {
     );
   }, [getLoadedExpressionNames, resolveExpressionNameFromFile]);
 
+  const applyExpressionTransition = useCallback((
+    expressionName: string,
+    lappAdapter: any,
+    fadeSeconds: number = DEFAULT_EXPRESSION_TRANSITION_SECONDS,
+  ) => {
+    const motion = lappAdapter?.getModel?.()?._expressions?.getValue?.(expressionName);
+    if (!motion) {
+      return;
+    }
+
+    motion.setFadeInTime?.(fadeSeconds);
+    motion.setFadeOutTime?.(fadeSeconds);
+  }, []);
+
+  const getCurrentExpressionName = useCallback((lappAdapter: any): string | null => {
+    const model = lappAdapter?.getModel?.();
+    const currentExpressionName = model?.[MODEL_EXPRESSION_STATE_KEY];
+
+    return typeof currentExpressionName === 'string' && currentExpressionName
+      ? currentExpressionName
+      : null;
+  }, []);
+
+  const setCurrentExpressionName = useCallback((
+    lappAdapter: any,
+    expressionName: string | null,
+  ) => {
+    const model = lappAdapter?.getModel?.();
+    if (!model) {
+      return;
+    }
+
+    model[MODEL_EXPRESSION_STATE_KEY] = expressionName;
+  }, []);
+
+  const getActiveExpressionMotionCount = useCallback((lappAdapter: any): number => {
+    return lappAdapter
+      ?.getModel?.()
+      ?._expressionManager
+      ?.getCubismMotionQueueEntries?.()
+      ?.getSize?.() ?? 0;
+  }, []);
+
+  const fadeOutCurrentExpressions = useCallback((
+    lappAdapter: any,
+    fadeSeconds: number = DEFAULT_EXPRESSION_TRANSITION_SECONDS,
+  ) => {
+    const motionEntries = lappAdapter
+      ?.getModel?.()
+      ?._expressionManager
+      ?.getCubismMotionQueueEntries?.();
+    const motionCount = motionEntries?.getSize?.() ?? 0;
+
+    for (let i = 0; i < motionCount; i += 1) {
+      motionEntries.at(i)?.setFadeOut?.(fadeSeconds);
+    }
+  }, []);
+
   /**
    * Set expression for Live2D model
    * @param expressionValue - Expression name (string) or index (number)
@@ -154,14 +215,32 @@ export const useLive2DExpression = () => {
     logMessage?: string,
   ): boolean => {
     const expressionName = resolveExpressionName(expressionValue, lappAdapter);
+    const currentExpressionName = getCurrentExpressionName(lappAdapter);
+    const activeExpressionMotionCount = getActiveExpressionMotionCount(lappAdapter);
+
+    if (
+      currentExpressionName === expressionName
+      && activeExpressionMotionCount > 0
+    ) {
+      return false;
+    }
+
+    applyExpressionTransition(expressionName, lappAdapter);
     lappAdapter.setExpression(expressionName);
+    setCurrentExpressionName(lappAdapter, expressionName);
 
     if (logMessage) {
       console.log(logMessage);
     }
 
     return true;
-  }, [resolveExpressionName]);
+  }, [
+    applyExpressionTransition,
+    getActiveExpressionMotionCount,
+    getCurrentExpressionName,
+    resolveExpressionName,
+    setCurrentExpressionName,
+  ]);
 
   /**
    * Reset expression to default
@@ -181,9 +260,9 @@ export const useLive2DExpression = () => {
       throw new Error('Cannot reset expression before the Live2D model is ready.');
     }
 
-    model._expressionManager?.stopAllMotions?.();
-
     if (modelInfo?.defaultEmotion === undefined) {
+      fadeOutCurrentExpressions(lappAdapter);
+      setCurrentExpressionName(lappAdapter, null);
       return;
     }
 
@@ -192,7 +271,7 @@ export const useLive2DExpression = () => {
       lappAdapter,
       `Reset expression to default: ${modelInfo.defaultEmotion}`,
     );
-  }, [setExpression]);
+  }, [fadeOutCurrentExpressions, setCurrentExpressionName, setExpression]);
 
   return {
     setExpression,
