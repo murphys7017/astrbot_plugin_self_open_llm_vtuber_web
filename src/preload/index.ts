@@ -2,7 +2,6 @@
 import electron from 'electron';
 const { contextBridge, ipcRenderer, desktopCapturer } = electron;
 import { electronAPI } from '@electron-toolkit/preload';
-import { ConfigFile } from '../main/menu-manager';
 
 declare global {
   interface Window {
@@ -108,17 +107,8 @@ const api = {
     ipcRenderer.on('toggle-scroll-to-resize', handler);
     return () => ipcRenderer.removeListener('toggle-scroll-to-resize', handler);
   },
-  onSwitchCharacter: (callback: (filename: string) => void) => {
-    const handler = (_event: any, filename: string) => callback(filename);
-    ipcRenderer.on('switch-character', handler);
-    return () => ipcRenderer.removeListener('switch-character', handler);
-  },
   setMode: (mode: 'window' | 'pet') => {
     ipcRenderer.send('pre-mode-changed', mode);
-  },
-  getConfigFiles: () => ipcRenderer.invoke('get-config-files'),
-  updateConfigFiles: (files: ConfigFile[]) => {
-    ipcRenderer.send('update-config-files', files);
   },
 };
 

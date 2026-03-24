@@ -28,10 +28,7 @@ declare global {
       setPetOverlayPreferredHeight: (height: number) => void
       onToggleInputSubtitle: (callback: () => void) => void
       onToggleScrollToResize: (callback: () => void) => void
-      onSwitchCharacter: (callback: (filename: string) => void) => void
       setMode: (mode: 'window' | 'pet') => void
-      getConfigFiles: () => Promise<any>
-      updateConfigFiles: (files: any[]) => void
     }
   }
 }

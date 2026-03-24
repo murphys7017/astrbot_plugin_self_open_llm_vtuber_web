@@ -145,7 +145,6 @@ type RouterDeps = {
   setModelInfo: (value: any) => void;
   setConfName: (value: string) => void;
   setConfUid: (value: string) => void;
-  setConfigFiles: (value: any) => void;
   setCurrentHistoryUid: (value: string | null) => void;
   setHistoryList: (value: any) => void;
   setMessages: (value: any) => void;
@@ -171,7 +170,6 @@ export const createWebSocketMessageHandler = ({
   setModelInfo,
   setConfName,
   setConfUid,
-  setConfigFiles,
   setCurrentHistoryUid,
   setHistoryList,
   setMessages,
@@ -200,21 +198,6 @@ export const createWebSocketMessageHandler = ({
         setAiState('idle');
         break;
       case 'full-text':
-        break;
-      case 'config-files':
-        if (message.configs) {
-          setConfigFiles(message.configs);
-        }
-        break;
-      case 'config-switched':
-        setAiState('idle');
-        setSubtitleText(t('notification.characterLoaded'));
-        toaster.create({
-          title: t('notification.characterSwitched'),
-          type: 'success',
-          duration: 2000,
-        });
-        sendMessage({ type: 'fetch-history-list' });
         break;
       case 'background-files':
         if (message.files && setBackgroundFiles) {

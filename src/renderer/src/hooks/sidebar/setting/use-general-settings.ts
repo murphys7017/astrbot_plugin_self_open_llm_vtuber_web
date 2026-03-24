@@ -5,8 +5,6 @@ import { BgUrlContextState } from '@/context/bgurl-context';
 import { defaultBaseUrl, defaultWsUrl } from '@/context/websocket-context';
 import { useSubtitle } from '@/context/subtitle-context';
 import { useCamera } from '@/context/camera-context';
-import { useSwitchCharacter } from '@/hooks/utils/use-switch-character';
-import { useConfig } from '@/context/character-config-context';
 import i18n from 'i18next';
 
 export const IMAGE_COMPRESSION_QUALITY_KEY = 'appImageCompressionQuality';
@@ -19,7 +17,6 @@ interface GeneralSettings {
   customBgUrl: string
   selectedBgUrl: string[]
   backgroundUrl: string
-  selectedCharacterPreset: string[]
   useCameraBackground: boolean
   wsUrl: string
   baseUrl: string
@@ -30,8 +27,6 @@ interface GeneralSettings {
 
 interface UseGeneralSettingsProps {
   bgUrlContext: BgUrlContextState | null
-  confName: string | undefined
-  setConfName: (name: string) => void
   baseUrl: string
   wsUrl: string
   onWsUrlChange: (url: string) => void
@@ -64,8 +59,6 @@ const loadInitialImageMaxWidth = (): number => {
 
 export const useGeneralSettings = ({
   bgUrlContext,
-  confName,
-  setConfName,
   baseUrl,
   wsUrl,
   onWsUrlChange,
@@ -76,20 +69,12 @@ export const useGeneralSettings = ({
   const { showSubtitle, setShowSubtitle } = useSubtitle();
   const { setUseCameraBackground } = bgUrlContext || {};
   const { startBackgroundCamera, stopBackgroundCamera } = useCamera();
-  const { configFiles, getFilenameByName } = useConfig();
-  const { switchCharacter } = useSwitchCharacter();
 
   const getCurrentBgKey = (): string[] => {
     if (!bgUrlContext?.backgroundUrl) return [];
     const currentBgUrl = bgUrlContext.backgroundUrl;
     const path = currentBgUrl.replace(baseUrl, '');
     return path.startsWith('/bg/') ? [path] : [];
-  };
-
-  const getCurrentCharacterFilename = (): string[] => {
-    if (!confName) return [];
-    const filename = getFilenameByName(confName);
-    return filename ? [filename] : [];
   };
 
   const initialSettings: GeneralSettings = {
@@ -99,7 +84,6 @@ export const useGeneralSettings = ({
       : '',
     selectedBgUrl: getCurrentBgKey(),
     backgroundUrl: bgUrlContext?.backgroundUrl || '',
-    selectedCharacterPreset: getCurrentCharacterFilename(),
     useCameraBackground: bgUrlContext?.useCameraBackground || false,
     wsUrl: wsUrl || defaultWsUrl,
     baseUrl: baseUrl || defaultBaseUrl,
@@ -110,7 +94,6 @@ export const useGeneralSettings = ({
 
   const [settings, setSettings] = useState<GeneralSettings>(initialSettings);
   const [originalSettings, setOriginalSettings] = useState<GeneralSettings>(initialSettings);
-  const originalConfName = confName;
 
   useEffect(() => {
     setShowSubtitle(settings.showSubtitle);
@@ -131,20 +114,6 @@ export const useGeneralSettings = ({
     localStorage.setItem(IMAGE_COMPRESSION_QUALITY_KEY, settings.imageCompressionQuality.toString());
     localStorage.setItem(IMAGE_MAX_WIDTH_KEY, settings.imageMaxWidth.toString());
   }, [settings, bgUrlContext, baseUrl, onWsUrlChange, onBaseUrlChange, setShowSubtitle]);
-
-  useEffect(() => {
-    if (confName) {
-      const filename = getFilenameByName(confName);
-      if (filename) {
-        const newSettings = {
-          ...settings,
-          selectedCharacterPreset: [filename],
-        };
-        setSettings(newSettings);
-        setOriginalSettings(newSettings);
-      }
-    }
-  }, [confName]);
 
   // Add save/cancel effect
   useEffect(() => {
@@ -198,32 +167,11 @@ export const useGeneralSettings = ({
     onWsUrlChange(originalSettings.wsUrl);
     onBaseUrlChange(originalSettings.baseUrl);
 
-    // Restore original character preset
-    if (originalConfName) {
-      setConfName(originalConfName);
-    }
-
     // Handle camera state
     if (originalSettings.useCameraBackground) {
       startBackgroundCamera();
     } else {
       stopBackgroundCamera();
-    }
-  };
-
-  const handleCharacterPresetChange = (value: string[]): void => {
-    const selectedFilename = value[0];
-    const selectedConfig = configFiles.find((config) => config.filename === selectedFilename);
-    const currentFilename = confName ? getFilenameByName(confName) : '';
-
-    handleSettingChange('selectedCharacterPreset', value);
-
-    if (currentFilename === selectedFilename) {
-      return;
-    }
-
-    if (selectedConfig) {
-      switchCharacter(selectedFilename);
     }
   };
 
@@ -253,7 +201,6 @@ export const useGeneralSettings = ({
     handleSave,
     handleCancel,
     handleCameraToggle,
-    handleCharacterPresetChange,
     showSubtitle,
     setShowSubtitle,
   };

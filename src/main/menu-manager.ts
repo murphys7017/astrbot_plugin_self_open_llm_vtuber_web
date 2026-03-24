@@ -5,17 +5,10 @@ import {
 // @ts-expect-error
 import trayIcon from '../../resources/icon.png?asset';
 
-export interface ConfigFile {
-  filename: string;
-  name: string;
-}
-
 export class MenuManager {
   private tray: Tray | null = null;
 
   private currentMode: 'window' | 'pet' = 'window';
-
-  private configFiles: ConfigFile[] = [];
 
   constructor(
     private onModeChange: (mode: 'window' | 'pet') => void,
@@ -169,17 +162,6 @@ export class MenuManager {
       },
       { type: 'separator' as const },
       {
-        label: 'Switch Character',
-        visible: this.currentMode === 'pet',
-        submenu: this.configFiles.map((config) => ({
-          label: config.name,
-          click: () => {
-            event.sender.send('switch-character', config.filename);
-          },
-        })),
-      },
-      { type: 'separator' as const },
-      {
         label: 'Hide',
         click: () => {
           const windows = BrowserWindow.getAllWindows();
@@ -223,9 +205,5 @@ export class MenuManager {
   destroy(): void {
     this.tray?.destroy();
     this.tray = null;
-  }
-
-  updateConfigFiles(files: ConfigFile[]): void {
-    this.configFiles = files;
   }
 }

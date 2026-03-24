@@ -109,16 +109,6 @@ function setupIPC(): void {
     },
   );
 
-  ipcMain.handle("get-config-files", () => {
-    const configFiles = JSON.parse(localStorage.getItem("configFiles") || "[]");
-    menuManager.updateConfigFiles(configFiles);
-    return configFiles;
-  });
-
-  ipcMain.on("update-config-files", (_event, files) => {
-    menuManager.updateConfigFiles(files);
-  });
-
   ipcMain.handle('get-screen-capture', async () => {
     const sources = await desktopCapturer.getSources({ types: ['screen'] });
     return sources[0].id;

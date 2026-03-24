@@ -43,7 +43,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
   } = useChatHistory();
   const { addAudioTask, stopCurrentAudioAndLipSync } = useAudioTask();
   const bgUrlContext = useBgUrl();
-  const { setConfName, setConfUid, setConfigFiles } = useConfig();
+  const { setConfName, setConfUid } = useConfig();
   const { startMic, stopMic, autoStartMicOnConvEnd } = useVAD();
   const autoStartMicOnConvEndRef = useRef(autoStartMicOnConvEnd);
   const { interrupt } = useInterrupt();
@@ -77,7 +77,6 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
     setModelInfo,
     setConfName,
     setConfUid,
-    setConfigFiles,
     setCurrentHistoryUid,
     setHistoryList,
     setMessages,
@@ -105,7 +104,6 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
       setModelInfo,
       setConfName,
       setConfUid,
-      setConfigFiles,
       setCurrentHistoryUid,
       setHistoryList,
       setMessages,
@@ -120,7 +118,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
     handleControlMessage,
     appendHumanMessage, appendOrUpdateToolCallMessage, setAiState,
     setBackendSynthComplete, setModelInfo, setConfName, setConfUid,
-    setConfigFiles, setCurrentHistoryUid, setHistoryList, setMessages,
+    setCurrentHistoryUid, setHistoryList, setMessages,
     setSubtitleText, setForceNewMessage, setBrowserViewData, bgUrlContext, sendMessage,
   ]);
 

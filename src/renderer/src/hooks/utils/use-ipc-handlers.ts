@@ -2,7 +2,6 @@ import { useEffect, useCallback } from "react";
 import { useInterrupt } from "@/hooks/utils/use-interrupt";
 import { useMicToggle } from "./use-mic-toggle";
 import { useLive2DConfig } from "@/context/live2d-config-context";
-import { useSwitchCharacter } from "@/hooks/utils/use-switch-character";
 import { useForceIgnoreMouse } from "@/hooks/utils/use-force-ignore-mouse";
 import { useMode } from "@/context/mode-context";
 
@@ -10,7 +9,6 @@ export function useIpcHandlers() {
   const { handleMicToggle } = useMicToggle();
   const { interrupt } = useInterrupt();
   const { modelInfo, setModelInfo } = useLive2DConfig();
-  const { switchCharacter } = useSwitchCharacter();
   const { setForceIgnoreMouse } = useForceIgnoreMouse();
   const { mode } = useMode();
   const isPet = mode === 'pet';
@@ -31,13 +29,6 @@ export function useIpcHandlers() {
       });
     }
   }, [modelInfo, setModelInfo]);
-
-  const switchCharacterHandler = useCallback(
-    (_event: Electron.IpcRendererEvent, filename: string) => {
-      switchCharacter(filename);
-    },
-    [switchCharacter],
-  );
 
   // Handler for force ignore mouse state changes from main process
   const forceIgnoreMouseChangedHandler = useCallback(
@@ -63,7 +54,6 @@ export function useIpcHandlers() {
       "toggle-scroll-to-resize",
       scrollToResizeHandler,
     );
-    window.electron.ipcRenderer.removeListener("switch-character", switchCharacterHandler);
     window.electron.ipcRenderer.removeListener(
       "toggle-force-ignore-mouse",
       toggleForceIgnoreMouseHandler,
@@ -79,7 +69,6 @@ export function useIpcHandlers() {
       "toggle-scroll-to-resize",
       scrollToResizeHandler,
     );
-    window.electron.ipcRenderer.on("switch-character", switchCharacterHandler);
     window.electron.ipcRenderer.on(
       "toggle-force-ignore-mouse",
       toggleForceIgnoreMouseHandler,
@@ -96,7 +85,6 @@ export function useIpcHandlers() {
         "toggle-scroll-to-resize",
         scrollToResizeHandler,
       );
-      window.electron?.ipcRenderer.removeListener("switch-character", switchCharacterHandler);
       window.electron?.ipcRenderer.removeListener(
         "toggle-force-ignore-mouse",
         toggleForceIgnoreMouseHandler,
@@ -110,7 +98,6 @@ export function useIpcHandlers() {
     micToggleHandler,
     interruptHandler,
     scrollToResizeHandler,
-    switchCharacterHandler,
     toggleForceIgnoreMouseHandler,
     forceIgnoreMouseChangedHandler,
     isPet,

@@ -4,7 +4,6 @@
 import { Subject } from 'rxjs';
 import { ModelInfo } from '@/context/live2d-config-context';
 import { HistoryInfo } from '@/context/websocket-context';
-import { ConfigFile } from '@/context/character-config-context';
 import { toaster } from '@/components/ui/toaster';
 
 export interface DisplayText {
@@ -21,8 +20,6 @@ interface BackgroundFile {
 export interface AudioPayload {
   type: 'audio';
   audio_url?: string;
-  volumes?: number[];
-  slice_length?: number;
   display_text?: DisplayText;
   actions?: Actions;
 }
@@ -66,8 +63,6 @@ export interface MessageEvent {
   timestamp: string;
   type: string;
   audio_url?: string;
-  volumes?: number[];
-  slice_length?: number;
   files?: BackgroundFile[];
   actions?: Actions;
   text?: string;
@@ -79,7 +74,6 @@ export interface MessageEvent {
   history_uid?: string;
   success?: boolean;
   histories?: HistoryInfo[];
-  configs?: ConfigFile[];
   message?: string;
   members?: string[];
   is_owner?: boolean;
@@ -135,9 +129,6 @@ class WebSocketService {
   private initializeConnection() {
     this.sendMessage({
       type: 'fetch-backgrounds',
-    });
-    this.sendMessage({
-      type: 'fetch-configs',
     });
     this.sendMessage({
       type: 'fetch-history-list',

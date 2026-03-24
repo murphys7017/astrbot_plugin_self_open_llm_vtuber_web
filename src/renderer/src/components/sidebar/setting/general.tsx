@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import { Stack, createListCollection } from "@chakra-ui/react";
 import { useBgUrl } from "@/context/bgurl-context";
 import { settingStyles } from "./setting-styles";
-import { useConfig } from "@/context/character-config-context";
 import { useGeneralSettings } from "@/hooks/sidebar/setting/use-general-settings";
 import { useWebSocket } from "@/context/websocket-context";
 import { SelectField, SwitchField, InputField } from "./common";
@@ -16,7 +15,6 @@ interface GeneralProps {
 // Data collection definition
 const useCollections = () => {
   const { backgroundFiles } = useBgUrl() || {};
-  const { configFiles } = useConfig();
 
   const languages = createListCollection({
     items: [
@@ -33,24 +31,15 @@ const useCollections = () => {
       })) || [],
   });
 
-  const characterPresets = createListCollection({
-    items: configFiles.map((config) => ({
-      label: config.name,
-      value: config.filename,
-    })),
-  });
-
   return {
     languages,
     backgrounds,
-    characterPresets,
   };
 };
 
 function General({ onSave, onCancel }: GeneralProps): JSX.Element {
   const { t, i18n } = useTranslation();
   const bgUrlContext = useBgUrl();
-  const { confName, setConfName } = useConfig();
   const { wsUrl, setWsUrl, baseUrl, setBaseUrl } = useWebSocket();
   const collections = useCollections();
 
@@ -58,13 +47,10 @@ function General({ onSave, onCancel }: GeneralProps): JSX.Element {
     settings,
     handleSettingChange,
     handleCameraToggle,
-    handleCharacterPresetChange,
     showSubtitle,
     setShowSubtitle,
   } = useGeneralSettings({
     bgUrlContext,
-    confName,
-    setConfName,
     baseUrl,
     wsUrl,
     onWsUrlChange: setWsUrl,
@@ -117,14 +103,6 @@ function General({ onSave, onCancel }: GeneralProps): JSX.Element {
           />
         </>
       )}
-
-      <SelectField
-        label={t("settings.general.characterPreset")}
-        value={settings.selectedCharacterPreset}
-        onChange={handleCharacterPresetChange}
-        collection={collections.characterPresets}
-        placeholder={confName || t("settings.general.characterPreset")}
-      />
 
       <InputField
         label={t("settings.general.wsUrl")}
