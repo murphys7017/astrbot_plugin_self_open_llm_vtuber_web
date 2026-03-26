@@ -379,6 +379,21 @@ export class LAppModel extends CubismUserModel {
         this._lipSyncIds.pushBack(this._modelSetting.getLipSyncParameterId(i));
       }
 
+      if (this._lipSyncIds.getSize() === 0) {
+        const fallbackLipSyncIds = this.findLipSyncFallbackIds();
+
+        for (const fallbackLipSyncId of fallbackLipSyncIds) {
+          this._lipSyncIds.pushBack(fallbackLipSyncId);
+        }
+
+        if (LAppDefine.DebugLogEnable && fallbackLipSyncIds.length > 0) {
+          console.info(
+            '[Fallback] Added lip sync fallback parameter ids:',
+            fallbackLipSyncIds.map((id) => id?.getString?.().s ?? '<unknown>'),
+          );
+        }
+      }
+
       this._state = LoadStep.SetupLayout;
 
       // callback
@@ -804,6 +819,69 @@ export class LAppModel extends CubismUserModel {
         return;
       }
     }
+  }
+
+  private hasModelParameter(parameterId: CubismIdHandle | null): boolean {
+    if (!parameterId || !this._model) {
+      return false;
+    }
+
+    const parameterIndex = this._model.getParameterIndex(parameterId);
+    return parameterIndex >= 0 && parameterIndex < this._model.getParameterCount();
+  }
+
+  private findLipSyncFallbackIds(): CubismIdHandle[] {
+    const fallbackIds: CubismIdHandle[] = [];
+    const seen = new Set<string>();
+    const idManager = CubismFramework.getIdManager();
+
+    const pushIfValid = (parameterId: CubismIdHandle | null) => {
+      if (!parameterId || !this.hasModelParameter(parameterId)) {
+        return;
+      }
+
+      const key = parameterId.getString?.().s ?? '';
+      if (!key || seen.has(key)) {
+        return;
+      }
+
+      seen.add(key);
+      fallbackIds.push(parameterId);
+    };
+
+    if (idManager) {
+      [
+        CubismDefaultParameterId.ParamMouthOpenY,
+        'PARAM_MOUTH_OPEN_Y',
+        'ParamMouthOpen',
+        'PARAM_MOUTH_OPEN',
+      ].forEach((parameterName) => {
+        pushIfValid(idManager.getId(parameterName));
+      });
+    }
+
+    if (fallbackIds.length > 0) {
+      return fallbackIds;
+    }
+
+    const parameterIds = this._model?._parameterIds;
+    const parameterCount = this._model?.getParameterCount?.() ?? 0;
+    for (let i = 0; i < parameterCount; i += 1) {
+      const parameterId = parameterIds?.at?.(i) ?? null;
+      const parameterName = parameterId?.getString?.().s ?? '';
+
+      if (!/(mouth.*open|open.*mouth)/i.test(parameterName)) {
+        continue;
+      }
+
+      pushIfValid(parameterId);
+    }
+
+    if (LAppDefine.DebugLogEnable && fallbackIds.length === 0) {
+      console.info('[Fallback] No usable lip sync parameter ids were found on the model.');
+    }
+
+    return fallbackIds;
   }
 
   /**
