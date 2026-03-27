@@ -166,9 +166,8 @@ export const useLive2DResize = ({
 
     try {
       const containerBounds = containerRef.current?.getBoundingClientRect();
-      const { width, height } = isPet
-        ? { width: window.innerWidth, height: window.innerHeight }
-        : containerBounds || { width: 0, height: 0 };
+      // Always use container bounds for consistent sizing, even in pet mode
+      const { width, height } = containerBounds || { width: 0, height: 0 };
 
       const lastDimensions = lastContainerDimensionsRef.current;
       const sidebarChanged = prevSidebarStateRef.current !== showSidebar;
@@ -195,8 +194,8 @@ export const useLive2DResize = ({
       const dpr = window.devicePixelRatio || 1;
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(height * dpr);
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
+      // Don't set explicit pixel dimensions - let CSS handle it with 100%
+      // This avoids conflicts with parent container sizing
 
       const delegate = LAppDelegate.getInstance();
       if (delegate) {
@@ -283,8 +282,13 @@ export const useLive2DResize = ({
     };
   }, [containerRef, handleResize]);
 
-  // Monitor window size changes (mainly for 'pet' mode or fallback)
+  // Monitor window size changes (only for window mode, pet mode window is fixed size)
   useEffect(() => {
+    // Skip window resize listener in pet mode since window size is fixed
+    if (isPet) {
+      return undefined;
+    }
+
     const handleWindowResize = () => {
       if (!isResizingRef.current) {
         if (animationFrameIdRef.current !== null) cancelAnimationFrame(animationFrameIdRef.current);
@@ -304,7 +308,7 @@ export const useLive2DResize = ({
         animationFrameIdRef.current = null;
       }
     };
-  }, [handleResize]);
+  }, [handleResize, isPet]);
 
   return { canvasRef, handleResize };
 };

@@ -141,8 +141,8 @@ function AppContent(): JSX.Element {
     ...live2dBaseStyle,
     top: 0, // Override position for pet mode
     left: 0,
-    width: "100vw", // Full viewport
-    height: "100vh",
+    width: "100%", // Use parent container dimensions instead of viewport
+    height: "100%",
     zIndex: 15, // Higher zIndex for pet mode overlay
   };
 
