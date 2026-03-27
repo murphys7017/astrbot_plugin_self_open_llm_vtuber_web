@@ -102,6 +102,16 @@ export const useLive2DResize = ({
     const currentScale = lastScaleRef.current;
     const diff = clampedTargetScale - currentScale;
 
+    // Check if animation is complete (diff is small enough)
+    if (Math.abs(diff) < 0.0001) {
+      // Snap to target scale and stop animation
+      applyScale(clampedTargetScale);
+      lastScaleRef.current = clampedTargetScale;
+      isAnimatingRef.current = false;
+      animationFrameRef.current = undefined;
+      return;
+    }
+
     const newScale = currentScale + diff * EASING_FACTOR;
     applyScale(newScale);
     lastScaleRef.current = newScale;
@@ -194,8 +204,8 @@ export const useLive2DResize = ({
       const dpr = window.devicePixelRatio || 1;
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(height * dpr);
-      // Don't set explicit pixel dimensions - let CSS handle it with 100%
-      // This avoids conflicts with parent container sizing
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
 
       const delegate = LAppDelegate.getInstance();
       if (delegate) {

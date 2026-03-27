@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import { useInterrupt } from "@/hooks/utils/use-interrupt";
 import { useMicToggle } from "./use-mic-toggle";
 import { useLive2DConfig } from "@/context/live2d-config-context";
@@ -13,93 +13,83 @@ export function useIpcHandlers() {
   const { mode } = useMode();
   const isPet = mode === 'pet';
 
-  const micToggleHandler = useCallback(() => {
-    handleMicToggle();
-  }, [handleMicToggle]);
+  // 【P0 修复】使用 ref 保存最新状态，避免 handler 引用变化
+  const stateRef = useRef({
+    handleMicToggle,
+    interrupt,
+    modelInfo,
+    setModelInfo,
+    setForceIgnoreMouse,
+  });
 
-  const interruptHandler = useCallback(() => {
-    interrupt();
-  }, [interrupt]);
+  // 同步最新状态到 ref（不触发任何重新渲染）
+  useEffect(() => {
+    stateRef.current = {
+      handleMicToggle,
+      interrupt,
+      modelInfo,
+      setModelInfo,
+      setForceIgnoreMouse,
+    };
+  }, [handleMicToggle, interrupt, modelInfo, setModelInfo, setForceIgnoreMouse]);
 
-  const scrollToResizeHandler = useCallback(() => {
-    if (modelInfo) {
-      setModelInfo({
-        ...modelInfo,
-        scrollToResize: !modelInfo.scrollToResize,
+  // 【P0 修复】创建稳定的 handler（引用永远不变）
+  const stableMicToggleHandler = useCallback(() => {
+    stateRef.current.handleMicToggle();
+  }, []);
+
+  const stableInterruptHandler = useCallback(() => {
+    stateRef.current.interrupt();
+  }, []);
+
+  const stableScrollToResizeHandler = useCallback(() => {
+    const { modelInfo: currentModelInfo, setModelInfo: currentSetModelInfo } = stateRef.current;
+    if (currentModelInfo) {
+      currentSetModelInfo({
+        ...currentModelInfo,
+        scrollToResize: !currentModelInfo.scrollToResize,
       });
     }
-  }, [modelInfo, setModelInfo]);
+  }, []);
 
-  // Handler for force ignore mouse state changes from main process
-  const forceIgnoreMouseChangedHandler = useCallback(
+  const stableForceIgnoreMouseChangedHandler = useCallback(
     (_event: Electron.IpcRendererEvent, isForced: boolean) => {
       console.log("Force ignore mouse changed:", isForced);
-      setForceIgnoreMouse(isForced);
+      stateRef.current.setForceIgnoreMouse(isForced);
     },
-    [setForceIgnoreMouse],
+    [],
   );
 
-  // Handle toggle force ignore mouse from menu
-  const toggleForceIgnoreMouseHandler = useCallback(() => {
+  const stableToggleForceIgnoreMouseHandler = useCallback(() => {
     (window.api as any).toggleForceIgnoreMouse();
   }, []);
 
+  // 【P0 修复】只在 isPet 变化时注册/注销监听器
   useEffect(() => {
     if (!window.electron?.ipcRenderer) return;
     if (!isPet) return;
 
-    window.electron.ipcRenderer.removeListener("mic-toggle", micToggleHandler);
-    window.electron.ipcRenderer.removeListener("interrupt", interruptHandler);
-    window.electron.ipcRenderer.removeListener(
-      "toggle-scroll-to-resize",
-      scrollToResizeHandler,
-    );
-    window.electron.ipcRenderer.removeListener(
-      "toggle-force-ignore-mouse",
-      toggleForceIgnoreMouseHandler,
-    );
-    window.electron.ipcRenderer.removeListener(
-      "force-ignore-mouse-changed",
-      forceIgnoreMouseChangedHandler,
-    );
+    const ipc = window.electron.ipcRenderer;
 
-    window.electron.ipcRenderer.on("mic-toggle", micToggleHandler);
-    window.electron.ipcRenderer.on("interrupt", interruptHandler);
-    window.electron.ipcRenderer.on(
-      "toggle-scroll-to-resize",
-      scrollToResizeHandler,
-    );
-    window.electron.ipcRenderer.on(
-      "toggle-force-ignore-mouse",
-      toggleForceIgnoreMouseHandler,
-    );
-    window.electron.ipcRenderer.on(
-      "force-ignore-mouse-changed",
-      forceIgnoreMouseChangedHandler,
-    );
+    ipc.on("mic-toggle", stableMicToggleHandler);
+    ipc.on("interrupt", stableInterruptHandler);
+    ipc.on("toggle-scroll-to-resize", stableScrollToResizeHandler);
+    ipc.on("toggle-force-ignore-mouse", stableToggleForceIgnoreMouseHandler);
+    ipc.on("force-ignore-mouse-changed", stableForceIgnoreMouseChangedHandler);
 
     return () => {
-      window.electron?.ipcRenderer.removeListener("mic-toggle", micToggleHandler);
-      window.electron?.ipcRenderer.removeListener("interrupt", interruptHandler);
-      window.electron?.ipcRenderer.removeListener(
-        "toggle-scroll-to-resize",
-        scrollToResizeHandler,
-      );
-      window.electron?.ipcRenderer.removeListener(
-        "toggle-force-ignore-mouse",
-        toggleForceIgnoreMouseHandler,
-      );
-      window.electron?.ipcRenderer.removeListener(
-        "force-ignore-mouse-changed",
-        forceIgnoreMouseChangedHandler,
-      );
+      ipc.removeListener("mic-toggle", stableMicToggleHandler);
+      ipc.removeListener("interrupt", stableInterruptHandler);
+      ipc.removeListener("toggle-scroll-to-resize", stableScrollToResizeHandler);
+      ipc.removeListener("toggle-force-ignore-mouse", stableToggleForceIgnoreMouseHandler);
+      ipc.removeListener("force-ignore-mouse-changed", stableForceIgnoreMouseChangedHandler);
     };
   }, [
-    micToggleHandler,
-    interruptHandler,
-    scrollToResizeHandler,
-    toggleForceIgnoreMouseHandler,
-    forceIgnoreMouseChangedHandler,
     isPet,
+    stableMicToggleHandler,
+    stableInterruptHandler,
+    stableScrollToResizeHandler,
+    stableToggleForceIgnoreMouseHandler,
+    stableForceIgnoreMouseChangedHandler,
   ]);
 }

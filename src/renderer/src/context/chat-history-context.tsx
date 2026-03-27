@@ -14,6 +14,8 @@ interface ChatHistoryState {
   messages: Message[]; // Use the unified Message type
   historyList: HistoryInfo[];
   currentHistoryUid: string | null;
+  lastAIMessage: string;
+  hasAIMessages: boolean;
   appendHumanMessage: (content: string) => void;
   appendAIMessage: (content: string, name?: string, avatar?: string) => void;
   appendOrUpdateToolCallMessage: (toolMessageData: Partial<Message>) => void; // Accept partial data
@@ -35,7 +37,30 @@ const DEFAULT_HISTORY = {
   messages: [] as Message[],
   historyList: [] as HistoryInfo[],
   currentHistoryUid: null as string | null,
+  lastAIMessage: '',
+  hasAIMessages: false,
   fullResponse: '',
+};
+
+const MAX_DISPLAY_MESSAGES = 20;
+
+const trimMessagesForDisplay = (messages: Message[]) => {
+  if (messages.length <= MAX_DISPLAY_MESSAGES) {
+    return messages;
+  }
+
+  return messages.slice(-MAX_DISPLAY_MESSAGES);
+};
+
+const getLastAIMessage = (messages: Message[]) => {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role === 'ai' && message.content) {
+      return message.content;
+    }
+  }
+
+  return '';
 };
 
 /**
@@ -50,7 +75,7 @@ export const ChatHistoryContext = createContext<ChatHistoryState | null>(null);
  */
 export function ChatHistoryProvider({ children }: { children: React.ReactNode }) {
   // State management
-  const [messages, setMessages] = useState<Message[]>(DEFAULT_HISTORY.messages);
+  const [messages, setMessagesState] = useState<Message[]>(DEFAULT_HISTORY.messages);
   const [historyList, setHistoryList] = useState<HistoryInfo[]>(
     DEFAULT_HISTORY.historyList,
   );
@@ -60,6 +85,10 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
   );
   const [fullResponse, setFullResponse] = useState(DEFAULT_HISTORY.fullResponse);
   const [forceNewMessage, setForceNewMessage] = useState<boolean>(false);
+
+  const setMessages = useCallback((nextMessages: Message[]) => {
+    setMessagesState(trimMessagesForDisplay(nextMessages));
+  }, []);
 
   /**
    * Append a human message to the chat history
@@ -73,7 +102,7 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
       type: 'text', // Explicitly set type for human messages
       timestamp: new Date().toISOString(),
     };
-    setMessages((prevMessages) => [...prevMessages, newMessage]);
+    setMessagesState((prevMessages) => trimMessagesForDisplay([...prevMessages, newMessage]));
   }, []);
 
   /**
@@ -81,13 +110,13 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
    * @param content - Message content
    */
   const appendAIMessage = useCallback((content: string, name?: string, avatar?: string) => {
-    setMessages((prevMessages) => {
+    setMessagesState((prevMessages) => {
       const lastMessage = prevMessages[prevMessages.length - 1];
 
       // If forceNewMessage is true or last message is not an AI text message, create new message
       if (forceNewMessage || !lastMessage || lastMessage.role !== 'ai' || lastMessage.type !== 'text') {
         setForceNewMessage(false); // Reset the flag
-        return [...prevMessages, {
+        return trimMessagesForDisplay([...prevMessages, {
           id: Date.now().toString(),
           content,
           role: 'ai',
@@ -95,18 +124,18 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
           timestamp: new Date().toISOString(),
           name,
           avatar,
-        }];
+        }]);
       }
 
       // Otherwise, merge with last AI text message
-      return [
+      return trimMessagesForDisplay([
         ...prevMessages.slice(0, -1),
         {
           ...lastMessage,
           content: lastMessage.content + content,
           timestamp: new Date().toISOString(),
         },
-      ];
+      ]);
     });
   }, [forceNewMessage, setForceNewMessage]);
 
@@ -121,7 +150,7 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
       return;
     }
 
-    setMessages((prevMessages) => {
+    setMessagesState((prevMessages) => {
       const existingMessageIndex = prevMessages.findIndex(
         (msg) => msg.type === 'tool_call_status' && msg.tool_id === toolMessageData.tool_id!,
       );
@@ -137,7 +166,7 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
           content: toolMessageData.content || existingMsg.content, // Update content (result/error or keep input)
           timestamp: toolMessageData.timestamp!, // Update timestamp
         };
-        return updatedMessages;
+        return trimMessagesForDisplay(updatedMessages);
       } else {
         // Append new tool call message
         const newToolMessage: Message = {
@@ -152,7 +181,7 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
           timestamp: toolMessageData.timestamp!,
           // name/avatar could potentially be added if needed
         };
-        return [...prevMessages, newToolMessage];
+        return trimMessagesForDisplay([...prevMessages, newToolMessage]);
       }
     });
   }, []);
@@ -165,12 +194,20 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
     setFullResponse(DEFAULT_HISTORY.fullResponse);
   }, []);
 
+  const lastAIMessage = useMemo(() => getLastAIMessage(messages), [messages]);
+  const hasAIMessages = useMemo(
+    () => messages.some((message) => message.role === 'ai'),
+    [messages],
+  );
+
   // Memoized context value
   const contextValue = useMemo(
     () => ({
       messages,
       historyList,
       currentHistoryUid,
+      lastAIMessage,
+      hasAIMessages,
       appendHumanMessage,
       appendAIMessage,
       appendOrUpdateToolCallMessage, // Add to context value
@@ -186,6 +223,8 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
       messages,
       historyList,
       currentHistoryUid,
+      lastAIMessage,
+      hasAIMessages,
       appendHumanMessage,
       appendAIMessage,
       appendOrUpdateToolCallMessage, // Add dependency

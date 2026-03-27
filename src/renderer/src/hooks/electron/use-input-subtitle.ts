@@ -17,18 +17,11 @@ export function useInputSubtitle() {
 
   } = useTextInput();
 
-  const { messages } = useChatHistory();
+  const { lastAIMessage, hasAIMessages } = useChatHistory();
   const { startMic, autoStartMicOn } = useVAD();
   const { handleMicToggle, micOn } = useMicToggle();
   const { aiState, setAiState } = useAiState();
   const { interrupt } = useInterrupt();
-
-  const lastAIMessage = messages
-    .filter((msg) => msg.role === 'ai')
-    .slice(-1)
-    .map((msg) => msg.content)[0];
-
-  const hasAIMessages = messages.some((msg) => msg.role === 'ai');
 
   const handleInterrupt = () => {
     interrupt();

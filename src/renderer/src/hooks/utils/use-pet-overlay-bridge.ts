@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { useWebSocket } from '@/context/websocket-context';
 import { useAiState } from '@/context/ai-state-context';
 import { useInterrupt } from '@/hooks/utils/use-interrupt';
@@ -21,14 +21,14 @@ export function usePetOverlayBridge() {
   const { sendMessage } = useWebSocket();
   const { aiState, setAiState } = useAiState();
   const { interrupt } = useInterrupt();
-  const { messages, appendHumanMessage } = useChatHistory();
+  const { lastAIMessage, appendHumanMessage } = useChatHistory();
   const {
     startMic, stopMic, autoStartMicOn, autoStopMic, micOn,
   } = useVAD();
   const { captureAllMedia } = useMediaCapture();
   const sendInFlightRef = useRef(false);
 
-  // 【P1 修复】使用 useRef 隔离高频状态，稳定三个事件处理器
+  // 【P0 修复】使用 useRef 隔离高频状态
   const stateRef = useRef({
     aiState,
     micOn,
@@ -38,13 +38,45 @@ export function usePetOverlayBridge() {
     stateRef.current = { aiState, micOn };
   }, [aiState, micOn]);
 
-  const lastAIMessage = useMemo(
-    () => messages
-      .filter((msg) => msg.role === 'ai')
-      .slice(-1)
-      .map((msg) => msg.content)[0] || '',
-    [messages],
-  );
+  // 【P0 修复】使用 ref 保存最新的状态，用于防抖发送
+  const overlayStateRef = useRef({
+    aiState,
+    lastAIMessage,
+    micOn,
+  });
+
+  // 【P0 修复】防抖定时器 ref
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 【P0 修复】上一次发送的状态，避免发送相同数据
+  const lastSentStateRef = useRef<string | null>(null);
+
+  // 同步最新状态到 ref
+  useEffect(() => {
+    overlayStateRef.current = { aiState, lastAIMessage, micOn };
+  }, [aiState, lastAIMessage, micOn]);
+
+  // 【P0 修复】防抖发送函数
+  const sendOverlayStateDebounced = useCallback(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    debounceTimerRef.current = setTimeout(() => {
+      if (!isElectron || isOverlay) return;
+
+      const currentState = overlayStateRef.current;
+      const stateString = JSON.stringify(currentState);
+
+      // 【P0 修复】只在状态真正变化时发送
+      if (stateString === lastSentStateRef.current) {
+        return;
+      }
+
+      lastSentStateRef.current = stateString;
+      window.api?.sendPetOverlayState?.(currentState);
+    }, 50); // 50ms 防抖，减少 IPC 频率
+  }, [isElectron, isOverlay]);
 
   const handleOverlaySendText = useCallback(async (payload: { text?: string; timestamp?: number } | string) => {
     const rawText = typeof payload === 'string' ? payload : payload?.text ?? '';
@@ -53,7 +85,6 @@ export function usePetOverlayBridge() {
     sendInFlightRef.current = true;
 
     try {
-      // 从 ref 获取最新的 aiState，而不在依赖中包含
       if (stateRef.current.aiState === 'thinking-speaking') {
         interrupt();
       }
@@ -86,7 +117,6 @@ export function usePetOverlayBridge() {
   }, [interrupt, autoStartMicOn, startMic]);
 
   const handleOverlayMicToggle = useCallback(async () => {
-    // 从 ref 获取最新的 micOn 和 aiState
     if (stateRef.current.micOn) {
       stopMic();
       if (stateRef.current.aiState === 'listening') {
@@ -102,37 +132,46 @@ export function usePetOverlayBridge() {
     }
   }, [setAiState, startMic, stopMic]);
 
+  // 【P0 修复】稳定的事件处理器（依赖不变）
+  const stableHandleOverlaySendText = useCallback((payload: { text?: string; timestamp?: number } | string) => {
+    void handleOverlaySendText(payload);
+  }, [handleOverlaySendText]);
+
+  const stableHandleOverlayMicToggle = useCallback(() => {
+    void handleOverlayMicToggle();
+  }, [handleOverlayMicToggle]);
+
+  const stableHandleOverlayInterrupt = useCallback(() => {
+    handleOverlayInterrupt();
+  }, [handleOverlayInterrupt]);
+
   useEffect(() => {
     if (!isElectron || isOverlay) return;
 
     const cleanups: Array<() => void> = [];
-    const offSendText = window.api?.onPetOverlaySendText?.((payload) => {
-      void handleOverlaySendText(payload);
-    });
+    const offSendText = window.api?.onPetOverlaySendText?.(stableHandleOverlaySendText);
     if (typeof offSendText === 'function') cleanups.push(offSendText);
 
-    const offMicToggle = window.api?.onPetOverlayMicToggle?.(() => {
-      void handleOverlayMicToggle();
-    });
+    const offMicToggle = window.api?.onPetOverlayMicToggle?.(stableHandleOverlayMicToggle);
     if (typeof offMicToggle === 'function') cleanups.push(offMicToggle);
 
-    const offInterrupt = window.api?.onPetOverlayInterrupt?.(() => {
-      handleOverlayInterrupt();
-    });
+    const offInterrupt = window.api?.onPetOverlayInterrupt?.(stableHandleOverlayInterrupt);
     if (typeof offInterrupt === 'function') cleanups.push(offInterrupt);
 
     return () => {
       cleanups.forEach((cleanup) => cleanup());
     };
-  }, [isElectron, isOverlay, handleOverlayMicToggle, handleOverlaySendText, handleOverlayInterrupt]);
+  }, [isElectron, isOverlay, stableHandleOverlayMicToggle, stableHandleOverlaySendText, stableHandleOverlayInterrupt]);
 
+  // 【P0 修复】使用防抖发送 pet overlay 状态
   useEffect(() => {
     if (!isElectron || isOverlay) return;
+    sendOverlayStateDebounced();
 
-    window.api?.sendPetOverlayState?.({
-      aiState,
-      lastAIMessage,
-      micOn,
-    });
-  }, [aiState, lastAIMessage, micOn, isElectron, isOverlay]);
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, [aiState, lastAIMessage, micOn, isElectron, isOverlay, sendOverlayStateDebounced]);
 }
