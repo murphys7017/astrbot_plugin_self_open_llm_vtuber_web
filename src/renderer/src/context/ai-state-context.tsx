@@ -59,8 +59,8 @@ interface AiStateContextType {
     (state: AiState): void;
     (updater: (currentState: AiState) => AiState): void;
   };
-  backendSynthComplete: boolean;
-  setBackendSynthComplete: (complete: boolean) => void;
+  backendSynthCompleteEpoch: number;
+  markBackendSynthComplete: () => void;
   isIdle: boolean;
   isThinkingSpeaking: boolean;
   isInterrupted: boolean;
@@ -85,7 +85,7 @@ export const AiStateContext = createContext<AiStateContextType | null>(null);
  */
 export function AiStateProvider({ children }: { children: ReactNode }) {
   const [aiState, setAiStateInternal] = useState<AiState>(initialState);
-  const [backendSynthComplete, setBackendSynthComplete] = useState(false);
+  const [backendSynthCompleteEpoch, setBackendSynthCompleteEpoch] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const setAiState = useCallback((newState: AiState | ((currentState: AiState) => AiState)) => {
@@ -138,6 +138,10 @@ export function AiStateProvider({ children }: { children: ReactNode }) {
     setAiState(AiStateEnum.IDLE);
   }, [setAiState]);
 
+  const markBackendSynthComplete = useCallback(() => {
+    setBackendSynthCompleteEpoch((currentEpoch) => currentEpoch + 1);
+  }, []);
+
   useEffect(() => () => {
     if (timerRef.current) {
       clearTimeout(timerRef.current);
@@ -149,12 +153,12 @@ export function AiStateProvider({ children }: { children: ReactNode }) {
     () => ({
       aiState,
       setAiState,
-      backendSynthComplete,
-      setBackendSynthComplete,
+      backendSynthCompleteEpoch,
+      markBackendSynthComplete,
       ...stateChecks,
       resetState,
     }),
-    [aiState, setAiState, backendSynthComplete, stateChecks, resetState],
+    [aiState, setAiState, backendSynthCompleteEpoch, markBackendSynthComplete, stateChecks, resetState],
   );
 
   return (

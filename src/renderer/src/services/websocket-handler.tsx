@@ -28,7 +28,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
   const [wsState, setWsState] = useState<string>('CLOSED');
   const [wsUrl, setWsUrl] = useLocalStorage<string>('wsUrl', defaultWsUrl);
   const [baseUrl, setBaseUrl] = useLocalStorage<string>('baseUrl', defaultBaseUrl);
-  const { aiState, setAiState, setBackendSynthComplete } = useAiState();
+  const { aiState, setAiState, markBackendSynthComplete } = useAiState();
   const { setModelInfo } = useLive2DConfig();
   const { setSubtitleText } = useSubtitle();
   const {
@@ -73,7 +73,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
     appendHumanMessage,
     appendOrUpdateToolCallMessage,
     setAiState,
-    setBackendSynthComplete,
+    markBackendSynthComplete,
     setModelInfo,
     setConfName,
     setConfUid,
@@ -100,7 +100,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
       appendHumanMessage,
       appendOrUpdateToolCallMessage,
       setAiState,
-      setBackendSynthComplete,
+      markBackendSynthComplete,
       setModelInfo,
       setConfName,
       setConfUid,
@@ -117,7 +117,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
     aiState, baseUrl, currentHistoryUid, t, interrupt, addAudioTask,
     handleControlMessage,
     appendHumanMessage, appendOrUpdateToolCallMessage, setAiState,
-    setBackendSynthComplete, setModelInfo, setConfName, setConfUid,
+    markBackendSynthComplete, setModelInfo, setConfName, setConfUid,
     setCurrentHistoryUid, setHistoryList, setMessages,
     setSubtitleText, setForceNewMessage, setBrowserViewData, bgUrlContext, sendMessage,
   ]);

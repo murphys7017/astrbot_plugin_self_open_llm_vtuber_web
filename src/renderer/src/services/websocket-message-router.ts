@@ -141,7 +141,7 @@ type RouterDeps = {
   appendHumanMessage: (text: string) => void;
   appendOrUpdateToolCallMessage: (message: any) => void;
   setAiState: (value: any) => void;
-  setBackendSynthComplete: (value: boolean) => void;
+  markBackendSynthComplete: () => void;
   setModelInfo: (value: any) => void;
   setConfName: (value: string) => void;
   setConfUid: (value: string) => void;
@@ -166,7 +166,7 @@ export const createWebSocketMessageHandler = ({
   appendHumanMessage,
   appendOrUpdateToolCallMessage,
   setAiState,
-  setBackendSynthComplete,
+  markBackendSynthComplete,
   setModelInfo,
   setConfName,
   setConfUid,
@@ -295,7 +295,7 @@ export const createWebSocketMessageHandler = ({
         });
         break;
       case 'backend-synth-complete':
-        setBackendSynthComplete(true);
+        markBackendSynthComplete();
         break;
       case 'heartbeat-ack':
       case 'group-update':

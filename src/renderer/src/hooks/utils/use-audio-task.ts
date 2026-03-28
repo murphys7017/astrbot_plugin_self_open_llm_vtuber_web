@@ -39,13 +39,19 @@ interface AudioTaskOptions {
  */
 export const useAudioTask = () => {
   const { t } = useTranslation();
-  const { aiState, backendSynthComplete, setBackendSynthComplete } = useAiState();
+  const { aiState, backendSynthCompleteEpoch } = useAiState();
   const { setSubtitleText } = useSubtitle();
   const { appendResponse, appendAIMessage, fullResponse } = useChatHistory();
   const { sendMessage } = useWebSocket();
   const { modelInfo } = useLive2DConfig();
   const { setExpression, resetExpression } = useLive2DExpression();
   const expressionOnlyHoldMs = 900;
+  const playbackCompletionRef = useRef({
+    expected: false,
+    failed: false,
+    reason: '',
+  });
+  const latestSynthCompleteEpochRef = useRef(0);
 
   // State refs to avoid stale closures
   const stateRef = useRef({
@@ -65,6 +71,14 @@ export const useAudioTask = () => {
     appendAIMessage,
     fullResponse,
   };
+
+  const resetPlaybackCompletionState = useCallback(() => {
+    playbackCompletionRef.current = {
+      expected: false,
+      failed: false,
+      reason: '',
+    };
+  }, []);
 
   /**
    * Stop current audio playback and lip sync (delegates to global audioManager)
@@ -266,22 +280,37 @@ export const useAudioTask = () => {
 
   // Handle backend synthesis completion
   useEffect(() => {
+    if (backendSynthCompleteEpoch <= 0) {
+      return undefined;
+    }
+
     let isMounted = true;
+    latestSynthCompleteEpochRef.current = backendSynthCompleteEpoch;
 
     const handleComplete = async () => {
       await audioTaskQueue.waitForCompletion();
-      if (isMounted && backendSynthComplete) {
-        sendMessage({ type: "frontend-playback-complete" });
-        setBackendSynthComplete(false);
+      if (
+        isMounted
+        && backendSynthCompleteEpoch === latestSynthCompleteEpochRef.current
+      ) {
+        const completionState = playbackCompletionRef.current;
+        if (completionState.expected) {
+          sendMessage({
+            type: "frontend-playback-complete",
+            success: !completionState.failed,
+            reason: completionState.failed ? completionState.reason : undefined,
+          });
+        }
+        resetPlaybackCompletionState();
       }
     };
 
-    handleComplete();
+    void handleComplete();
 
     return () => {
       isMounted = false;
     };
-  }, [backendSynthComplete, sendMessage, setBackendSynthComplete]);
+  }, [backendSynthCompleteEpoch, resetPlaybackCompletionState, sendMessage]);
 
   /**
    * Add a new audio task to the queue
@@ -293,7 +322,25 @@ export const useAudioTask = () => {
       return;
     }
 
-    audioTaskQueue.addTask(() => handleAudioPlayback(options));
+    const expectsPlaybackCompletion = Boolean(options.audioUrl);
+    if (expectsPlaybackCompletion) {
+      playbackCompletionRef.current.expected = true;
+    }
+
+    audioTaskQueue.addTask(async () => {
+      try {
+        await handleAudioPlayback(options);
+      } catch (error) {
+        if (expectsPlaybackCompletion) {
+          playbackCompletionRef.current.failed = true;
+          if (!playbackCompletionRef.current.reason) {
+            playbackCompletionRef.current.reason = error instanceof Error
+              ? error.message
+              : String(error);
+          }
+        }
+      }
+    });
   };
 
   return {

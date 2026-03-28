@@ -555,6 +555,7 @@ export const runAudioPlaybackLifecycle = async ({
 
       const detachAudioListeners = () => {
         audio.removeEventListener('canplay', handleCanPlay);
+        audio.removeEventListener('playing', handlePlaybackStart);
         audio.removeEventListener('ended', handleEnded);
         audio.removeEventListener('error', handleError);
       };
@@ -570,6 +571,7 @@ export const runAudioPlaybackLifecycle = async ({
       };
 
       const fail = (error: unknown) => {
+        clearPlaybackVisuals();
         detachAudioListeners();
         deps.audioManager.clearCurrentAudio(audio);
         URL.revokeObjectURL(blobUrl); // 清理 Blob URL
@@ -598,9 +600,6 @@ export const runAudioPlaybackLifecycle = async ({
           }
         });
 
-        // 音频、字幕、动画同时开始
-        startAllSync();
-
         audio.play().catch((err) => {
           if (!isActiveAudio()) {
             cleanup();
@@ -613,6 +612,10 @@ export const runAudioPlaybackLifecycle = async ({
 
       function handleCanPlay() {
         requestPlayback();
+      }
+
+      function handlePlaybackStart() {
+        startAllSync();
       }
 
       function handleEnded() {
@@ -642,6 +645,7 @@ export const runAudioPlaybackLifecycle = async ({
       }
 
       audio.addEventListener('canplay', handleCanPlay);
+      audio.addEventListener('playing', handlePlaybackStart);
       audio.addEventListener('ended', handleEnded);
       audio.addEventListener('error', handleError);
 
