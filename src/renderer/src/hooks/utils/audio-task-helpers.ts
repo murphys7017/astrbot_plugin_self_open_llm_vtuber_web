@@ -351,6 +351,7 @@ export const preloadLipSyncAudio = async (
   model: any,
   audio: HTMLAudioElement,
   audioUrl: string,
+  arrayBuffer?: ArrayBuffer,
 ) => {
   const wavFileHandler = model?._wavFileHandler;
   if (!wavFileHandler) {
@@ -425,7 +426,12 @@ export const preloadLipSyncAudio = async (
     };
   }
 
-  const loaded = await wavFileHandler.loadWavFile(audioUrl);
+  let loaded: boolean;
+  if (arrayBuffer) {
+    loaded = await wavFileHandler.loadWavBuffer(arrayBuffer, audioUrl);
+  } else {
+    loaded = await wavFileHandler.loadWavFile(audioUrl);
+  }
   if (!loaded) {
     throw new Error('Failed to preload lip sync audio data');
   }
@@ -456,60 +462,36 @@ export const runAudioPlaybackLifecycle = async ({
         throw new Error('Model does not have _wavFileHandler for lip sync.');
       }
 
-      const audio = new Audio(audioUrl);
-      audio.preload = 'auto';
-      const lipSyncReadyPromise = preloadLipSyncAudio(model, audio, audioUrl);
-
       console.log('[AudioTaskTiming] loaded_audio_source', {
         at: performance.now(),
         audioUrl,
       });
+
+      // 只加载一次音频：fetch 一次，同时给 HTMLAudioElement 和 wavFileHandler 使用
+      const response = await fetch(audioUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch audio ${audioUrl}: ${response.status} ${response.statusText}`);
+      }
+      const arrayBuffer = await response.arrayBuffer();
+
+      // 创建 Blob URL 给 HTMLAudioElement 使用
+      const blob = new Blob([arrayBuffer]);
+      const blobUrl = URL.createObjectURL(blob);
+
+      const audio = new Audio();
+      audio.preload = 'auto';
+      audio.src = blobUrl;
+
+      // 预加载口型同步数据（使用已获取的 arrayBuffer，避免第二次网络请求）
+      const lipSyncReadyPromise = preloadLipSyncAudio(model, audio, audioUrl, arrayBuffer);
 
       let isFinished = false;
       let playbackStarted = false;
       let playbackVisualsCleared = false;
       let playRequested = false;
 
-      const clearPlaybackVisuals = () => {
-        if (playbackVisualsCleared) {
-          return;
-        }
-
-        playbackVisualsCleared = true;
-        deps.updateSubtitle('');
-        deps.resetModelExpression();
-      };
-
-      const isActiveAudio = () => deps.audioManager.isCurrentAudio(audio);
-
-      const detachAudioListeners = () => {
-        audio.removeEventListener('playing', handlePlaybackStart);
-        audio.removeEventListener('canplay', handleCanPlay);
-        audio.removeEventListener('ended', handleEnded);
-        audio.removeEventListener('error', handleError);
-      };
-
-      const cleanup = () => {
-        detachAudioListeners();
-        deps.audioManager.clearCurrentAudio(audio);
-        if (!isFinished) {
-          isFinished = true;
-          resolve();
-        }
-      };
-
-      const fail = (error: unknown) => {
-        detachAudioListeners();
-        deps.audioManager.clearCurrentAudio(audio);
-        if (!isFinished) {
-          isFinished = true;
-          reject(error instanceof Error ? error : new Error(String(error)));
-        }
-      };
-
-      deps.audioManager.setCurrentAudio(audio, model, cleanup);
-
-      function handlePlaybackStart() {
+      // 统一启动音频、字幕、动画的函数
+      const startAllSync = () => {
         if (playbackStarted || !isActiveAudio()) {
           return;
         }
@@ -522,6 +504,7 @@ export const runAudioPlaybackLifecycle = async ({
           currentTime: audio.currentTime,
         });
 
+        // 立即显示字幕
         if (displayText) {
           console.log('[AudioTaskTiming] subtitle_shown', {
             at: performance.now(),
@@ -539,6 +522,7 @@ export const runAudioPlaybackLifecycle = async ({
           });
         }
 
+        // 立即设置表情
         if (expressionValue !== null && lappAdapter) {
           deps.setExpression(
             expressionValue,
@@ -547,6 +531,7 @@ export const runAudioPlaybackLifecycle = async ({
           );
         }
 
+        // 立即播放动作
         if (resolvedMotion) {
           playResolvedMotion(model, resolvedMotion);
         }
@@ -554,7 +539,47 @@ export const runAudioPlaybackLifecycle = async ({
         if (model._wavFileHandler) {
           model._wavFileHandler._syncAudioElement = audio;
         }
-      }
+      };
+
+      const clearPlaybackVisuals = () => {
+        if (playbackVisualsCleared) {
+          return;
+        }
+
+        playbackVisualsCleared = true;
+        deps.updateSubtitle('');
+        deps.resetModelExpression();
+      };
+
+      const isActiveAudio = () => deps.audioManager.isCurrentAudio(audio);
+
+      const detachAudioListeners = () => {
+        audio.removeEventListener('canplay', handleCanPlay);
+        audio.removeEventListener('ended', handleEnded);
+        audio.removeEventListener('error', handleError);
+      };
+
+      const cleanup = () => {
+        detachAudioListeners();
+        deps.audioManager.clearCurrentAudio(audio);
+        URL.revokeObjectURL(blobUrl); // 清理 Blob URL
+        if (!isFinished) {
+          isFinished = true;
+          resolve();
+        }
+      };
+
+      const fail = (error: unknown) => {
+        detachAudioListeners();
+        deps.audioManager.clearCurrentAudio(audio);
+        URL.revokeObjectURL(blobUrl); // 清理 Blob URL
+        if (!isFinished) {
+          isFinished = true;
+          reject(error instanceof Error ? error : new Error(String(error)));
+        }
+      };
+
+      deps.audioManager.setCurrentAudio(audio, model, cleanup);
 
       const requestPlayback = () => {
         if (playRequested) {
@@ -572,6 +597,9 @@ export const runAudioPlaybackLifecycle = async ({
             fail(error);
           }
         });
+
+        // 音频、字幕、动画同时开始
+        startAllSync();
 
         audio.play().catch((err) => {
           if (!isActiveAudio()) {
@@ -613,7 +641,6 @@ export const runAudioPlaybackLifecycle = async ({
         fail(error);
       }
 
-      audio.addEventListener('playing', handlePlaybackStart);
       audio.addEventListener('canplay', handleCanPlay);
       audio.addEventListener('ended', handleEnded);
       audio.addEventListener('error', handleError);

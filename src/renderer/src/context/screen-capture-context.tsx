@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useRef, useState, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toaster } from "@/components/ui/toaster";
 
@@ -17,10 +17,31 @@ export function ScreenCaptureProvider({ children }: { children: ReactNode }) {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState('');
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const resetCaptureState = useCallback((nextError = '') => {
+    streamRef.current = null;
+    setStream(null);
+    setIsStreaming(false);
+    setError(nextError);
+  }, []);
+
+  const stopCapture = useCallback(() => {
+    const activeStream = streamRef.current;
+    if (activeStream) {
+      activeStream.getTracks().forEach((track) => track.stop());
+    }
+    resetCaptureState();
+    console.info('[ScreenCapture] stopped screen capture stream');
+  }, [resetCaptureState]);
 
   const startCapture = async () => {
     try {
       let mediaStream: MediaStream;
+
+      if (streamRef.current) {
+        stopCapture();
+      }
 
       if (window.electron) {
         const sourceId = await window.electron.ipcRenderer.invoke('get-screen-capture');
@@ -42,6 +63,9 @@ export function ScreenCaptureProvider({ children }: { children: ReactNode }) {
         };
 
         mediaStream = await navigator.mediaDevices.getUserMedia(displayMediaOptions);
+        console.info('[ScreenCapture] obtained desktop source for screen capture', {
+          sourceId,
+        });
       } else {
         const displayMediaOptions: DisplayMediaStreamOptions = {
           video: true,
@@ -50,9 +74,26 @@ export function ScreenCaptureProvider({ children }: { children: ReactNode }) {
         mediaStream = await navigator.mediaDevices.getDisplayMedia(displayMediaOptions);
       }
 
+      mediaStream.getVideoTracks().forEach((track) => {
+        track.addEventListener('ended', () => {
+          if (streamRef.current !== mediaStream) {
+            return;
+          }
+          console.info('[ScreenCapture] screen capture track ended', {
+            label: track.label,
+            readyState: track.readyState,
+          });
+          resetCaptureState();
+        });
+      });
+
+      streamRef.current = mediaStream;
       setStream(mediaStream);
       setIsStreaming(true);
       setError('');
+      console.info('[ScreenCapture] screen capture stream started', {
+        videoTrackCount: mediaStream.getVideoTracks().length,
+      });
     } catch (err) {
       setError(t('error.failedStartScreenCapture'));
       toaster.create({
@@ -61,14 +102,6 @@ export function ScreenCaptureProvider({ children }: { children: ReactNode }) {
         duration: 2000,
       });
       console.error(err);
-    }
-  };
-
-  const stopCapture = () => {
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
-      setStream(null);
-      setIsStreaming(false);
     }
   };
 

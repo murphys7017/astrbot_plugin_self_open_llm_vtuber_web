@@ -54,13 +54,21 @@ export function useMediaCapture() {
 
   const captureFrame = useCallback(async (stream: MediaStream | null, source: 'camera' | 'screen') => {
     if (!stream) {
-      console.warn(`No ${source} stream available`);
+      console.warn(`[MediaCapture] No ${source} stream available`);
       return null;
     }
 
     const videoTrack = stream.getVideoTracks()[0];
     if (!videoTrack) {
-      console.warn(`No video track in ${source} stream`);
+      console.warn(`[MediaCapture] No video track in ${source} stream`);
+      return null;
+    }
+
+    if (videoTrack.readyState !== 'live') {
+      console.warn(`[MediaCapture] Skip ${source} capture because track is not live`, {
+        readyState: videoTrack.readyState,
+        label: videoTrack.label,
+      });
       return null;
     }
 
@@ -86,9 +94,21 @@ export function useMediaCapture() {
 
       ctx.drawImage(bitmap, 0, 0, width, height);
       const quality = getCompressionQuality();
-      return canvas.toDataURL('image/jpeg', quality);
+      const dataUrl = canvas.toDataURL('image/jpeg', quality);
+      if (typeof bitmap.close === 'function') {
+        bitmap.close();
+      }
+      console.info('[MediaCapture] Captured frame', {
+        source,
+        width,
+        height,
+        quality,
+        readyState: videoTrack.readyState,
+        dataUrlLength: dataUrl.length,
+      });
+      return dataUrl;
     } catch (error) {
-      console.error(`Error capturing ${source} frame:`, error);
+      console.error(`[MediaCapture] Error capturing ${source} frame:`, error);
       toaster.create({
         title: `${t('error.failedCapture', { source: source })}: ${error}`,
         type: 'error',
@@ -125,7 +145,12 @@ export function useMediaCapture() {
       }
     }
 
-    console.log("images: ", images);
+    console.info('[MediaCapture] captureAllMedia result', {
+      cameraAvailable: Boolean(cameraStream),
+      screenAvailable: Boolean(screenStream),
+      imageCount: images.length,
+      sources: images.map((image) => image.source),
+    });
 
     return images;
   }, [cameraStream, screenStream, captureFrame]);
